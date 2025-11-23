@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import Link from 'next/link';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,7 +30,7 @@ export default function CreateSignalPage() {
     formState: { errors, isSubmitting },
     reset,
   } = useForm<SignalForm>({
-    resolver: zodResolver<SignalForm>(schema),
+    resolver: zodResolver(schema) as Resolver<SignalForm>,
     defaultValues: {
       signal_date: new Date().toISOString().split('T')[0],
       race_type: 'JRA',
