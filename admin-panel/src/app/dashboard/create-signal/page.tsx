@@ -30,7 +30,7 @@ export default function CreateSignalPage() {
     formState: { errors, isSubmitting },
     reset,
   } = useForm<SignalForm>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver<SignalForm>(schema),
     defaultValues: {
       signal_date: new Date().toISOString().split('T')[0],
       race_type: 'JRA',
