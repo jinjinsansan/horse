@@ -5,6 +5,8 @@ import Link from 'next/link';
 import type { BetSignal } from '@horsebet/shared/types/database.types';
 import { supabase } from '@/lib/supabase/client';
 
+const SERVER_BET_AVAILABLE = process.env.NEXT_PUBLIC_ENABLE_SERVER_BET === 'true';
+
 type BetJob = {
   id: string;
   signal_id: number | null;
@@ -21,7 +23,11 @@ export default function ClientPage() {
   const [loadingSignals, setLoadingSignals] = useState(true);
   const [jobStatus, setJobStatus] = useState<Record<number, string>>({});
   const [userId, setUserId] = useState<string | null>(null);
-  const [infoMessage, setInfoMessage] = useState('');
+  const [infoMessage, setInfoMessage] = useState(
+    SERVER_BET_AVAILABLE
+      ? ''
+      : '現在サーバー自動投票は提供を停止しています。Electron版アプリをご利用ください。',
+  );
 
   const refreshSignals = useCallback(async () => {
     setLoadingSignals(true);
@@ -55,6 +61,11 @@ export default function ClientPage() {
   }, [userId, fetchJobsFor]);
 
   const handleServerBet = useCallback(async (signal: BetSignal) => {
+    if (!SERVER_BET_AVAILABLE) {
+      setInfoMessage('現在サーバー自動投票は提供を停止しています。Electron版アプリをご利用ください。');
+      return;
+    }
+
     setInfoMessage('');
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
@@ -155,9 +166,12 @@ export default function ClientPage() {
         <td className="px-6 py-4 text-right">
           <button
             onClick={() => handleServerBet(signal)}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            disabled={!SERVER_BET_AVAILABLE}
+            className={`rounded-md px-4 py-2 text-sm font-semibold text-white ${
+              SERVER_BET_AVAILABLE ? 'bg-blue-600 hover:bg-blue-700' : 'cursor-not-allowed bg-gray-400'
+            }`}
           >
-            サーバー自動投票
+            {SERVER_BET_AVAILABLE ? 'サーバー自動投票' : 'サーバー自動投票 (停止中)'}
           </button>
           {jobStatus[signal.id] && (
             <p className="mt-2 text-xs text-gray-500">{jobStatus[signal.id]}</p>
@@ -173,7 +187,11 @@ export default function ClientPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">HorseBet 利用者ダッシュボード</h1>
-            <p className="text-sm text-gray-500">ブラウザからサーバー自動投票を実行できます</p>
+            <p className="text-sm text-gray-500">
+              {SERVER_BET_AVAILABLE
+                ? 'ブラウザからサーバー自動投票を実行できます'
+                : '現在ブラウザからの自動投票は準備中です'}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Link
@@ -203,7 +221,11 @@ export default function ClientPage() {
         <section className="mb-8 rounded-lg bg-white shadow">
           <div className="border-b px-6 py-4">
             <h2 className="text-lg font-semibold text-gray-900">本日の買い目</h2>
-            <p className="text-sm text-gray-500">任意の買い目でサーバー自動投票が実行できます</p>
+            <p className="text-sm text-gray-500">
+              {SERVER_BET_AVAILABLE
+                ? '任意の買い目でサーバー自動投票が実行できます'
+                : 'サーバー自動投票は現在停止中です (Electron版をご利用ください)'}
+            </p>
           </div>
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -235,9 +257,19 @@ export default function ClientPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">サーバー実行ジョブ履歴</h2>
-                <p className="text-sm text-gray-500">最新20件まで表示されます</p>
+                <p className="text-sm text-gray-500">
+                  {SERVER_BET_AVAILABLE
+                    ? '最新20件まで表示されます'
+                    : 'サーバー自動投票が再開された際に表示されます'}
+                </p>
               </div>
-              <button onClick={refreshJobs} className="text-sm font-medium text-blue-600 hover:underline">
+              <button
+                onClick={refreshJobs}
+                disabled={!SERVER_BET_AVAILABLE}
+                className={`text-sm font-medium ${
+                  SERVER_BET_AVAILABLE ? 'text-blue-600 hover:underline' : 'cursor-not-allowed text-gray-400'
+                }`}
+              >
                 更新
               </button>
             </div>
