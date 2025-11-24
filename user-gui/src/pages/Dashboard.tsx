@@ -26,6 +26,7 @@ export default function Dashboard() {
     ipat?: { inetId: string; userCode: string; password: string; pin: string };
     spat4?: { userId: string; password: string };
   }>({});
+  const [autoBetEnabled, setAutoBetEnabled] = useState(false);
   const [betStatus, setBetStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -44,7 +45,9 @@ export default function Dashboard() {
     if (Notification.permission === 'default') {
       Notification.requestPermission();
     }
+  }, []);
 
+  useEffect(() => {
     const unsubscribe = subscribeToSignalFeed((signal) => {
       setSignals((prev) => [signal, ...prev]);
       setSelectedSignal(signal);
@@ -53,12 +56,15 @@ export default function Dashboard() {
           body: `${signal.jo_name} ${signal.race_no}R ${signal.bet_type_name}`,
         });
       }
+      if (autoBetEnabled) {
+        handleBetExecution(signal, true);
+      }
     });
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [autoBetEnabled, credentials]);
 
   const todaysCount = useMemo(() => signals.length, [signals]);
 
@@ -73,13 +79,14 @@ export default function Dashboard() {
     setUserId(user.user.id);
     const { data } = await supabase
       .from('user_profiles')
-      .select('display_name, ipat_credentials, spat4_credentials')
+      .select('display_name, ipat_credentials, spat4_credentials, auto_bet_enabled')
       .eq('id', user.user.id)
       .single();
     if (data?.display_name) {
       setProfileName(data.display_name);
     }
     if (data) {
+      setAutoBetEnabled(data.auto_bet_enabled ?? false);
       setCredentials({
         ipat: data.ipat_credentials?.inet_id
           ? {
@@ -99,53 +106,64 @@ export default function Dashboard() {
     }
   }
 
-  const handleManualBet = async () => {
-    if (!selectedSignal) return;
+  const handleBetExecution = async (target: BetSignal | null, isAuto = false) => {
+    if (!target) return;
     if (!window.horsebet?.executeBet) {
-      setBetStatus('Electron版のみ投票ボタンが利用できます');
+      if (!isAuto) {
+        setBetStatus('Electron版のみ投票ボタンが利用できます');
+      }
       return;
     }
 
-    if (selectedSignal.race_type === 'JRA' && !credentials.ipat) {
-      setBetStatus('設定画面からIPAT認証情報を登録してください');
+    if (target.race_type === 'JRA' && !credentials.ipat) {
+      if (!isAuto) {
+        setBetStatus('設定画面からIPAT認証情報を登録してください');
+      }
       return;
     }
 
-    if (selectedSignal.race_type === 'NAR' && !credentials.spat4) {
-      setBetStatus('設定画面からSPAT4認証情報を登録してください');
+    if (target.race_type === 'NAR' && !credentials.spat4) {
+      if (!isAuto) {
+        setBetStatus('設定画面からSPAT4認証情報を登録してください');
+      }
       return;
     }
 
-    setBetStatus('投票処理を開始しています...');
+    if (!isAuto) {
+      setBetStatus('投票処理を開始しています...');
+    }
     const signalPayload: MinimalSignal = {
-      id: selectedSignal.id,
-      race_type: selectedSignal.race_type,
-      jo_name: selectedSignal.jo_name,
-      race_no: selectedSignal.race_no,
-      bet_type_name: selectedSignal.bet_type_name,
-      kaime_data: selectedSignal.kaime_data,
-      suggested_amount: selectedSignal.suggested_amount,
+      id: target.id,
+      race_type: target.race_type,
+      jo_name: target.jo_name,
+      race_no: target.race_no,
+      bet_type_name: target.bet_type_name,
+      kaime_data: target.kaime_data,
+      suggested_amount: target.suggested_amount,
     };
 
     const result = await window.horsebet.executeBet({
       signal: signalPayload,
       credentials,
+      headless: isAuto,
     });
 
     if (result?.success) {
-      setBetStatus('投票が完了しました');
+      if (!isAuto) {
+        setBetStatus('投票が完了しました');
+      }
       if (userId) {
         await logBetHistory({
-          signal: selectedSignal,
+          signal: target,
           userId,
-          isAuto: false,
+          isAuto,
           result: 'pending',
         });
       }
-    } else {
+    } else if (!isAuto) {
       setBetStatus(result?.message ?? '投票に失敗しました');
     }
-  }
+  };
 
   return (
     <div className="dashboard">
@@ -219,7 +237,7 @@ export default function Dashboard() {
               ))}
             </div>
             <div className="actions">
-              <button className="primary" onClick={handleManualBet}>
+              <button className="primary" onClick={() => handleBetExecution(selectedSignal)}>
                 手動で投票
               </button>
               <button className="secondary" onClick={() => navigate('/settings')}>
