@@ -25,7 +25,7 @@ export default function OddsPanel({ signal }: OddsPanelProps) {
   if (!signal || signal.race_type !== 'JRA') {
     return (
       <div className="odds-panel">
-        <p className="muted">JRAレース選択時にオッズが表示されます</p>
+        <p className="muted">現在はJRAレースのみリアルタイムオッズを表示しています（地方競馬は準備中）</p>
       </div>
     );
   }
