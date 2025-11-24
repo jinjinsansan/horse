@@ -4,6 +4,7 @@ import type { BetSignal } from '@shared/types/database.types';
 import { supabase } from '@/lib/supabase';
 import { fetchTodaySignals, subscribeToSignalFeed } from '@/lib/api/signals';
 import { logBetHistory } from '@/lib/api/history';
+import OddsPanel from '@/components/OddsPanel';
 import { Bell, Settings as SettingsIcon, LogOut } from 'lucide-react';
 
 type MinimalSignal = {
@@ -226,6 +227,7 @@ export default function Dashboard() {
               </button>
             </div>
             {betStatus && <p className="info" style={{ marginTop: '0.75rem' }}>{betStatus}</p>}
+            <OddsPanel signal={selectedSignal} />
           </section>
         ) : (
           <div className="empty">左の一覧から買い目を選択してください</div>
