@@ -1,4 +1,4 @@
-import type { BetSignal } from '@shared/types/database.types';
+import type { BetSignal } from '@horsebet/shared/types/database.types';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 

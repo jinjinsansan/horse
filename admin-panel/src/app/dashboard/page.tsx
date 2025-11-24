@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
-import type { BetSignal } from '@shared/types/database.types';
+import type { BetSignal } from '@horsebet/shared/types/database.types';
 import { fetchTodaySignals, subscribeToSignalInsert } from '@/lib/api/signals';
 
 export default function DashboardPage() {

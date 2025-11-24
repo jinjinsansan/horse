@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { BetSignal } from '@shared/types/database.types';
+import type { BetSignal } from '@horsebet/shared/types/database.types';
 import { supabase } from '@/lib/supabase';
 import { fetchTodaySignals, subscribeToSignalFeed } from '@/lib/api/signals';
 import { logBetHistory } from '@/lib/api/history';

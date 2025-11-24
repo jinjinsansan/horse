@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { BetSignal } from '@shared/types/database.types';
+import type { BetSignal } from '@horsebet/shared/types/database.types';
 
 export async function logBetHistory(params: {
   signal: BetSignal;

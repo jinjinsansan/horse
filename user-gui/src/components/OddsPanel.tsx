@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BetSignal } from '@shared/types/database.types';
+import type { BetSignal } from '@horsebet/shared/types/database.types';
 import { fetchJraOdds } from '@/lib/api/odds';
 import type { OddsEntry } from '@/types/odds';
 

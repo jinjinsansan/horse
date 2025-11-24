@@ -1,14 +1,31 @@
 {
-  "name": "shared",
+  "name": "@horsebet/shared",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Shared types and utilities for HorseBet",
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./types/*": "./dist/types/*",
+    "./lib/*": "./dist/lib/*"
+  },
+  "typesVersions": {
+    "*": {
+      "types/*": [
+        "dist/types/*"
+      ],
+      "lib/*": [
+        "dist/lib/*"
+      ]
+    }
+  },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3"

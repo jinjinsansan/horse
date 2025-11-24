@@ -2,9 +2,9 @@
 
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
-import type { BetSignal } from '@shared/types/database.types';
-import type { CreateSignalRequest } from '@shared/types/business.types';
-import { BET_TYPES, JO_CODES } from '@shared/types/business.types';
+import type { BetSignal } from '@horsebet/shared/types/database.types';
+import type { CreateSignalRequest } from '@horsebet/shared/types/business.types';
+import { BET_TYPES, JO_CODES } from '@horsebet/shared/types/business.types';
 
 const getJoName = (code: string) => JO_CODES[code as keyof typeof JO_CODES] ?? '不明';
 const getBetTypeName = (betType: number) => BET_TYPES[betType as keyof typeof BET_TYPES] ?? '不明';
