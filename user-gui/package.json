@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist-electron/main.cjs",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && npm run electron:serve\"",
-    "electron:serve": "tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs && cross-env NODE_ENV=development electron dist-electron/main.cjs",
+    "electron:serve": "tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs && cross-env NODE_ENV=development electron dist-electron/main.js",
     "build": "tsc -b && vite build && tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
