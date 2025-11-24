@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: horse-playwright-service
+    rootDir: playwright-service
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SERVICE_API_KEY
+        sync: false
+      - key: PLAYWRIGHT_HEADLESS
+        value: 'true'
+      - key: JOB_CONCURRENCY
+        value: '1'

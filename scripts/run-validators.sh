@@ -12,6 +12,10 @@ echo "[validators] Installing admin-panel dependencies"
 cd "$ROOT_DIR/admin-panel"
 npm install
 
+echo "[validators] Installing playwright-service dependencies"
+cd "$ROOT_DIR/playwright-service"
+npm install
+
 echo "[validators] Installing user-gui dependencies"
 cd "$ROOT_DIR/user-gui"
 npm install
@@ -27,6 +31,10 @@ npm run build
 
 echo "[validators] Building user-gui"
 cd "$ROOT_DIR/user-gui"
+npm run build
+
+echo "[validators] Building playwright-service"
+cd "$ROOT_DIR/playwright-service"
 npm run build
 
 echo "[validators] All checks completed"

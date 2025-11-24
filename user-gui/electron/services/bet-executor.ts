@@ -1,5 +1,11 @@
-import { executeIpatVote, type IpatCredentials, type IpatBetRequest } from './ipat-voter';
-import { Spat4Voter, type Spat4Credentials, type Spat4BetRequest } from './spat4-voter';
+import {
+  executeIpatVote,
+  type IpatCredentials,
+  type IpatBetRequest,
+  Spat4Voter,
+  type Spat4Credentials,
+  type Spat4BetRequest,
+} from '@horsebet/shared/automation';
 
 type MinimalBetSignal = {
   race_type: 'JRA' | 'NAR';

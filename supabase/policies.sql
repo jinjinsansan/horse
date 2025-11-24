@@ -5,6 +5,8 @@ ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bet_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE oiage_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE system_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bet_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bet_job_events ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY IF NOT EXISTS "bet_signals_read"
     ON bet_signals FOR SELECT
@@ -44,4 +46,24 @@ CREATE POLICY IF NOT EXISTS "system_logs_read"
     ON system_logs FOR SELECT
     USING (auth.uid() = user_id OR user_id IS NULL);
 
+CREATE POLICY IF NOT EXISTS "bet_jobs_read"
+    ON bet_jobs FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "bet_jobs_insert"
+    ON bet_jobs FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "bet_job_events_read"
+    ON bet_job_events FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM bet_jobs
+            WHERE bet_jobs.id = bet_job_events.job_id
+              AND bet_jobs.user_id = auth.uid()
+        )
+    );
+
 ALTER PUBLICATION supabase_realtime ADD TABLE bet_signals;
+ALTER PUBLICATION supabase_realtime ADD TABLE bet_jobs;
+ALTER PUBLICATION supabase_realtime ADD TABLE bet_job_events;

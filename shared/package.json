@@ -14,7 +14,12 @@
   ],
   "exports": {
     "./types/*": "./dist/types/*",
-    "./lib/*": "./dist/lib/*"
+    "./lib/*": "./dist/lib/*",
+    "./automation": {
+      "types": "./dist/automation/index.d.ts",
+      "default": "./dist/automation/index.js"
+    },
+    "./automation/*": "./dist/automation/*"
   },
   "typesVersions": {
     "*": {
@@ -23,12 +28,19 @@
       ],
       "lib/*": [
         "dist/lib/*"
+      ],
+      "automation": [
+        "dist/automation/index.d.ts"
+      ],
+      "automation/*": [
+        "dist/automation/*"
       ]
     }
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "playwright": "^1.56.1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.84.0"

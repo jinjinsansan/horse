@@ -10,7 +10,11 @@
     "verbatimModuleSyntax": false,
     "esModuleInterop": true,
     "types": ["node"],
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": "./",
+    "paths": {
+      "@horsebet/shared/*": ["../shared/*"]
+    }
   },
   "include": ["electron/**/*.ts"]
 }

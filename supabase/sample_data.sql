@@ -39,3 +39,8 @@ VALUES (
     '本命◎1番軸の流し',
     'REPLACE_WITH_AUTH_USER_UUID'
 );
+
+-- Seed placeholder bet job (will be processed by backend service)
+INSERT INTO bet_jobs (user_id, signal_id, status, trigger_source)
+VALUES ('REPLACE_WITH_AUTH_USER_UUID', currval('bet_signals_id_seq'), 'pending', 'manual')
+ON CONFLICT DO NOTHING;

@@ -7,6 +7,7 @@ const sharedPackage = path.resolve(root, 'shared/package.json');
 const targets = [
   path.resolve(root, 'admin-panel/node_modules/@horsebet/shared'),
   path.resolve(root, 'user-gui/node_modules/@horsebet/shared'),
+  path.resolve(root, 'playwright-service/node_modules/@horsebet/shared'),
 ];
 
 async function ensureSharedBuild() {

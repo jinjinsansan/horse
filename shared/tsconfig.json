@@ -12,6 +12,7 @@
   },
   "include": [
     "types/**/*",
-    "lib/**/*"
+    "lib/**/*",
+    "automation/**/*"
   ]
 }

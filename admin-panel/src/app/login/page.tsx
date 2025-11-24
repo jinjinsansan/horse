@@ -33,14 +33,15 @@ export default function LoginPage() {
       .eq('id', data.user?.id)
       .single();
 
-    if (profileError || profile?.settings?.role !== 'admin') {
-      setError('管理者権限がありません');
+    if (profileError) {
+      setError('プロフィール取得に失敗しました');
       await supabase.auth.signOut();
       setLoading(false);
       return;
     }
 
-    router.replace('/dashboard');
+    const role = profile?.settings?.role ?? 'user';
+    router.replace(role === 'admin' ? '/dashboard' : '/client');
   };
 
   return (

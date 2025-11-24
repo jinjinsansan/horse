@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     auto_bet_enabled BOOLEAN DEFAULT FALSE,
     ipat_credentials JSONB,
     spat4_credentials JSONB,
+    credentials_cipher TEXT,
+    credentials_iv TEXT,
+    credentials_version INTEGER DEFAULT 1,
+    credentials_updated_at TIMESTAMP WITH TIME ZONE,
     settings JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -65,6 +69,32 @@ CREATE TABLE IF NOT EXISTS bet_history (
 
 CREATE INDEX IF NOT EXISTS idx_bet_history_user ON bet_history(user_id, bet_date DESC);
 CREATE INDEX IF NOT EXISTS idx_bet_history_signal ON bet_history(signal_id);
+
+CREATE TABLE IF NOT EXISTS bet_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE,
+    signal_id BIGINT REFERENCES bet_signals(id),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','succeeded','failed')),
+    trigger_source VARCHAR(20) DEFAULT 'manual',
+    job_payload JSONB,
+    result JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE IF NOT EXISTS bet_job_events (
+    id BIGSERIAL PRIMARY KEY,
+    job_id UUID REFERENCES bet_jobs(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,
+    details JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_bet_jobs_user ON bet_jobs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bet_jobs_status ON bet_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_bet_job_events_job ON bet_job_events(job_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS oiage_state (
     id BIGSERIAL PRIMARY KEY,
