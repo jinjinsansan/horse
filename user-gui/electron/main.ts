@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { executeBet } from './services/bet-executor';
+import { fetchJraOdds } from './services/odds-fetcher';
 
 const isDev = process.env.NODE_ENV === 'development';
 let mainWindow: BrowserWindow | null = null;
@@ -47,4 +48,13 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('horsebet:execute-bet', async (_event, payload) => {
   return executeBet(payload);
+});
+
+ipcMain.handle('horsebet:fetch-odds', async (_event, payload: { joName: string; raceNo: number }) => {
+  try {
+    const data = await fetchJraOdds(payload);
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : `${error}` };
+  }
 });

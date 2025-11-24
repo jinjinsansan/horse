@@ -29,4 +29,6 @@ contextBridge.exposeInMainWorld('horsebet', {
     credentials: BridgeCredentials;
     headless?: boolean;
   }) => ipcRenderer.invoke('horsebet:execute-bet', payload),
+  fetchOdds: (payload: { joName: string; raceNo: number }) =>
+    ipcRenderer.invoke('horsebet:fetch-odds', payload),
 });

@@ -1,21 +1,7 @@
-import { JO_CODES } from '@shared/types/business.types';
+import type { OddsEntry } from '@/types/odds';
 
-export type OddsEntry = {
-  umaban: string;
-  odds: number;
-  popularity: number;
-};
-
-function getJoCodeByName(name: string) {
-  const entry = Object.entries(JO_CODES).find(([, label]) => label === name);
-  return entry?.[0] ?? '05';
-}
-
-export async function fetchJraOdds(params: { joName: string; raceNo: number }): Promise<OddsEntry[]> {
-  const joCode = getJoCodeByName(params.joName);
-
-  // Placeholder: generate stable pseudo odds so UI can function until real scraper is wired.
-  const seed = `${joCode}-${params.raceNo}`;
+function fallbackOdds(params: { joName: string; raceNo: number }): OddsEntry[] {
+  const seed = `${params.joName}-${params.raceNo}`;
   const pseudoRandom = (idx: number) => {
     let hash = 0;
     const text = seed + idx;
@@ -25,10 +11,21 @@ export async function fetchJraOdds(params: { joName: string; raceNo: number }): 
     }
     return Math.abs(hash % 1000) / 10 + 1.5;
   };
-
   return Array.from({ length: 12 }).map((_, idx) => ({
     umaban: String(idx + 1).padStart(2, '0'),
     odds: Number(pseudoRandom(idx + 1).toFixed(1)),
     popularity: idx + 1,
   }));
+}
+
+export async function fetchJraOdds(params: { joName: string; raceNo: number }): Promise<OddsEntry[]> {
+  if (!window.horsebet?.fetchOdds) {
+    return fallbackOdds(params);
+  }
+  const result = await window.horsebet.fetchOdds(params);
+  if (!result?.success || !Array.isArray(result.data)) {
+    console.warn('fetchJraOdds fallback triggered', result?.message);
+    return fallbackOdds(params);
+  }
+  return result.data as OddsEntry[];
 }

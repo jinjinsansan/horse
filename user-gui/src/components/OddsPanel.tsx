@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BetSignal } from '@shared/types/database.types';
-import { fetchJraOdds, type OddsEntry } from '@/lib/api/odds';
+import { fetchJraOdds } from '@/lib/api/odds';
+import type { OddsEntry } from '@/types/odds';
 
 interface OddsPanelProps {
   signal: BetSignal | null;

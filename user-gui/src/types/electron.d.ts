@@ -31,6 +31,11 @@ declare global {
         };
         headless?: boolean;
       }) => Promise<any>;
+      fetchOdds: (payload: { joName: string; raceNo: number }) => Promise<{
+        success: boolean;
+        message?: string;
+        data?: unknown;
+      }>;
     };
   }
 }
