@@ -1,5 +1,6 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
+import { executeBet } from './services/bet-executor.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 let mainWindow: BrowserWindow | null = null;
@@ -10,8 +11,8 @@ const createWindow = () => {
     height: 800,
     title: 'HorseBet User',
     webPreferences: {
-      contextIsolation: false,
-      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -42,4 +43,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+ipcMain.handle('horsebet:execute-bet', async (_event, payload) => {
+  return executeBet(payload);
 });
