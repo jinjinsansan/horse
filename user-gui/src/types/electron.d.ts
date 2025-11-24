@@ -1,5 +1,3 @@
-import type { BetSignal } from '@shared/types/database.types';
-
 interface RendererIpatCredentials {
   inetId: string;
   userCode: string;
@@ -12,11 +10,21 @@ interface RendererSpatCredentials {
   password: string;
 }
 
+interface RendererMinimalSignal {
+  id: number;
+  race_type: 'JRA' | 'NAR';
+  jo_name: string;
+  race_no: number;
+  bet_type_name: string;
+  kaime_data: string[];
+  suggested_amount: number;
+}
+
 declare global {
   interface Window {
     horsebet?: {
       executeBet: (payload: {
-        signal: BetSignal;
+        signal: RendererMinimalSignal;
         credentials: {
           ipat?: RendererIpatCredentials;
           spat4?: RendererSpatCredentials;

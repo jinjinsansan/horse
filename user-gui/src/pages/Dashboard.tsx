@@ -3,18 +3,35 @@ import { useNavigate } from 'react-router-dom';
 import type { BetSignal } from '@shared/types/database.types';
 import { supabase } from '@/lib/supabase';
 import { fetchTodaySignals, subscribeToSignalFeed } from '@/lib/api/signals';
+import { logBetHistory } from '@/lib/api/history';
 import { Bell, Settings as SettingsIcon, LogOut } from 'lucide-react';
+
+type MinimalSignal = {
+  id: number;
+  race_type: 'JRA' | 'NAR';
+  jo_name: string;
+  race_no: number;
+  bet_type_name: string;
+  kaime_data: string[];
+  suggested_amount: number;
+};
 
 export default function Dashboard() {
   const [signals, setSignals] = useState<BetSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<BetSignal | null>(null);
   const [profileName, setProfileName] = useState('');
+  const [userId, setUserId] = useState('');
+  const [credentials, setCredentials] = useState<{
+    ipat?: { inetId: string; userCode: string; password: string; pin: string };
+    spat4?: { userId: string; password: string };
+  }>({});
+  const [betStatus, setBetStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     const init = async () => {
-      const [{ data }] = await Promise.all([fetchTodaySignals(), loadProfileName()]);
+      const [{ data }] = await Promise.all([fetchTodaySignals(), loadProfile()]);
       if (data) {
         setSignals(data);
         setSelectedSignal(data[0] ?? null);
@@ -49,16 +66,83 @@ export default function Dashboard() {
     navigate('/login', { replace: true });
   };
 
-  async function loadProfileName() {
+  async function loadProfile() {
     const { data: user } = await supabase.auth.getUser();
     if (!user.user) return;
+    setUserId(user.user.id);
     const { data } = await supabase
       .from('user_profiles')
-      .select('display_name')
+      .select('display_name, ipat_credentials, spat4_credentials')
       .eq('id', user.user.id)
       .single();
     if (data?.display_name) {
       setProfileName(data.display_name);
+    }
+    if (data) {
+      setCredentials({
+        ipat: data.ipat_credentials?.inet_id
+          ? {
+              inetId: data.ipat_credentials.inet_id ?? '',
+              userCode: data.ipat_credentials.user_cd ?? '',
+              password: data.ipat_credentials.password ?? '',
+              pin: data.ipat_credentials.pin ?? '',
+            }
+          : undefined,
+        spat4: data.spat4_credentials?.user_id
+          ? {
+              userId: data.spat4_credentials.user_id ?? '',
+              password: data.spat4_credentials.password ?? '',
+            }
+          : undefined,
+      });
+    }
+  }
+
+  const handleManualBet = async () => {
+    if (!selectedSignal) return;
+    if (!window.horsebet?.executeBet) {
+      setBetStatus('Electron版のみ投票ボタンが利用できます');
+      return;
+    }
+
+    if (selectedSignal.race_type === 'JRA' && !credentials.ipat) {
+      setBetStatus('設定画面からIPAT認証情報を登録してください');
+      return;
+    }
+
+    if (selectedSignal.race_type === 'NAR' && !credentials.spat4) {
+      setBetStatus('設定画面からSPAT4認証情報を登録してください');
+      return;
+    }
+
+    setBetStatus('投票処理を開始しています...');
+    const signalPayload: MinimalSignal = {
+      id: selectedSignal.id,
+      race_type: selectedSignal.race_type,
+      jo_name: selectedSignal.jo_name,
+      race_no: selectedSignal.race_no,
+      bet_type_name: selectedSignal.bet_type_name,
+      kaime_data: selectedSignal.kaime_data,
+      suggested_amount: selectedSignal.suggested_amount,
+    };
+
+    const result = await window.horsebet.executeBet({
+      signal: signalPayload,
+      credentials,
+    });
+
+    if (result?.success) {
+      setBetStatus('投票が完了しました');
+      if (userId) {
+        await logBetHistory({
+          signal: selectedSignal,
+          userId,
+          isAuto: false,
+          result: 'pending',
+        });
+      }
+    } else {
+      setBetStatus(result?.message ?? '投票に失敗しました');
     }
   }
 
@@ -134,11 +218,14 @@ export default function Dashboard() {
               ))}
             </div>
             <div className="actions">
-              <button className="primary">手動で投票</button>
+              <button className="primary" onClick={handleManualBet}>
+                手動で投票
+              </button>
               <button className="secondary" onClick={() => navigate('/settings')}>
                 自動投票設定を開く
               </button>
             </div>
+            {betStatus && <p className="info" style={{ marginTop: '0.75rem' }}>{betStatus}</p>}
           </section>
         ) : (
           <div className="empty">左の一覧から買い目を選択してください</div>

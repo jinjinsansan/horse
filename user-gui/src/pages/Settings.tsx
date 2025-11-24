@@ -4,7 +4,9 @@ import { supabase } from '@/lib/supabase';
 
 interface CredentialForm {
   ipatId: string;
+  ipatUserCode: string;
   ipatPassword: string;
+  ipatPin: string;
   spatId: string;
   spatPassword: string;
 }
@@ -13,7 +15,9 @@ export default function Settings() {
   const [autoBetEnabled, setAutoBetEnabled] = useState(false);
   const [cred, setCred] = useState<CredentialForm>({
     ipatId: '',
+    ipatUserCode: '',
     ipatPassword: '',
+    ipatPin: '',
     spatId: '',
     spatPassword: '',
   });
@@ -34,7 +38,9 @@ export default function Settings() {
         setAutoBetEnabled(data.auto_bet_enabled ?? false);
         setCred({
           ipatId: data.ipat_credentials?.inet_id ?? '',
+          ipatUserCode: data.ipat_credentials?.user_cd ?? '',
           ipatPassword: data.ipat_credentials?.password ?? '',
+          ipatPin: data.ipat_credentials?.pin ?? '',
           spatId: data.spat4_credentials?.user_id ?? '',
           spatPassword: data.spat4_credentials?.password ?? '',
         });
@@ -54,7 +60,9 @@ export default function Settings() {
         auto_bet_enabled: autoBetEnabled,
         ipat_credentials: {
           inet_id: cred.ipatId,
+          user_cd: cred.ipatUserCode,
           password: cred.ipatPassword,
+          pin: cred.ipatPin,
         },
         spat4_credentials: {
           user_id: cred.spatId,
@@ -95,6 +103,14 @@ export default function Settings() {
               />
               <span>配信された買い目を自動で投票する</span>
             </label>
+            <label>
+              暗証番号（ユーザーコード）
+              <input
+                value={cred.ipatUserCode}
+                onChange={(event) => setCred((prev) => ({ ...prev, ipatUserCode: event.target.value }))}
+                placeholder="4桁"
+              />
+            </label>
           </div>
         </section>
 
@@ -103,6 +119,15 @@ export default function Settings() {
           <div className="grid">
             <label>
               加入者番号
+            <label>
+              暗証番号（PIN）
+              <input
+                type="password"
+                value={cred.ipatPin}
+                onChange={(event) => setCred((prev) => ({ ...prev, ipatPin: event.target.value }))}
+                placeholder="4桁"
+              />
+            </label>
               <input
                 value={cred.ipatId}
                 onChange={(event) => setCred((prev) => ({ ...prev, ipatId: event.target.value }))}
