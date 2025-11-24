@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && npm run electron:serve\"",
-    "electron:serve": "tsc -p tsconfig.electron.json && electron dist-electron/main.js",
-    "build": "tsc -b && vite build && tsc -p tsconfig.electron.json",
+    "electron:serve": "tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs && cross-env NODE_ENV=development electron dist-electron/main.cjs",
+    "build": "tsc -b && vite build && tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:build": "npm run build && electron-builder"
@@ -27,6 +27,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
     "electron": "^39.2.3",
     "electron-builder": "^26.0.12",
     "eslint": "^9.39.1",

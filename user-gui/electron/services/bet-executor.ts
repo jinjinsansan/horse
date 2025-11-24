@@ -1,5 +1,5 @@
-import { executeIpatVote, type IpatCredentials, type IpatBetRequest } from './ipat-voter.js';
-import { Spat4Voter, type Spat4Credentials, type Spat4BetRequest } from './spat4-voter.js';
+import { executeIpatVote, type IpatCredentials, type IpatBetRequest } from './ipat-voter';
+import { Spat4Voter, type Spat4Credentials, type Spat4BetRequest } from './spat4-voter';
 
 type MinimalBetSignal = {
   race_type: 'JRA' | 'NAR';
