@@ -30,8 +30,10 @@ export async function upsertOiageState(params: {
   betTypeName: string;
   targetProfit: number;
   isActive: boolean;
+  baseAmount: number;
+  maxSteps: number;
 }) {
-  const { userId, betType, betTypeName, targetProfit, isActive } = params;
+  const { userId, betType, betTypeName, targetProfit, isActive, baseAmount, maxSteps } = params;
   const { data: existing } = await supabase
     .from('oiage_state')
     .select('*')
@@ -47,6 +49,8 @@ export async function upsertOiageState(params: {
         total_investment: isActive ? existing.total_investment : 0,
         current_kaime: isActive ? existing.current_kaime : 0,
         is_active: isActive,
+        base_amount: baseAmount,
+        max_steps: maxSteps,
       })
       .eq('id', existing.id);
   }
@@ -59,6 +63,8 @@ export async function upsertOiageState(params: {
     total_investment: 0,
     current_kaime: 0,
     is_active: isActive,
+    base_amount: baseAmount,
+    max_steps: maxSteps,
   });
 }
 
@@ -72,13 +78,16 @@ export async function advanceOiage(record: OiageRecord, betAmount: number) {
     .eq('id', record.id);
 }
 
-export async function resetOiage(recordId: number) {
+export async function resetOiage(recordId: number, options?: { deactivate?: boolean }) {
+  const updatePayload: Record<string, number | boolean> = {
+    current_kaime: 0,
+    total_investment: 0,
+  };
+  if (options?.deactivate) {
+    updatePayload.is_active = false;
+  }
   return supabase
     .from('oiage_state')
-    .update({
-      is_active: false,
-      current_kaime: 0,
-      total_investment: 0,
-    })
+    .update(updatePayload)
     .eq('id', recordId);
 }

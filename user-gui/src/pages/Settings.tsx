@@ -117,6 +117,8 @@ export default function Settings() {
         betType: 8,
         betTypeName: '3連単',
         targetProfit: cred.oiageTargetProfit,
+        baseAmount: cred.oiageBaseAmount,
+        maxSteps: cred.oiageMaxSteps,
         isActive: oiageEnabled,
       });
       setMessage('設定を保存しました');

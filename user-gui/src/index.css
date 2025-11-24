@@ -371,6 +371,30 @@ select {
   gap: 0.75rem;
 }
 
+.oiage-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.oiage-actions button {
+  flex: 1;
+  border-radius: 1rem;
+  padding: 0.6rem 0.8rem;
+  font-weight: 600;
+}
+
+.oiage-actions .danger {
+  border: 1px solid #f87171;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.warning-text {
+  color: #dc2626;
+  font-weight: 600;
+}
+
 .muted {
   color: #94a3b8;
 }

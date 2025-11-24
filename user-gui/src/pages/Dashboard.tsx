@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BetSignal } from '@shared/types/database.types';
 import { supabase } from '@/lib/supabase';
 import { fetchTodaySignals, subscribeToSignalFeed } from '@/lib/api/signals';
 import { logBetHistory } from '@/lib/api/history';
-import { fetchActiveOiage, advanceOiage, type OiageRecord } from '@/lib/api/oiage';
+import { fetchActiveOiage, advanceOiage, resetOiage, type OiageRecord } from '@/lib/api/oiage';
 import { createOiageCalculator } from '@/services/oiage-calculator';
 import OddsPanel from '@/components/OddsPanel';
 import { Bell, Settings as SettingsIcon, LogOut } from 'lucide-react';
@@ -84,6 +84,13 @@ export default function Dashboard() {
       totalInvestment: oiageRecord.total_investment,
     });
   }, [oiageRecord, oiageCalculator, oiageConfig.baseAmount]);
+  const maxStepsReached = Boolean(oiageRecord?.is_active && oiageRecord.current_kaime >= oiageConfig.maxSteps);
+
+  const refreshOiageState = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await fetchActiveOiage(userId, 8);
+    setOiageRecord(data ?? null);
+  }, [userId]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -190,19 +197,25 @@ export default function Dashboard() {
       }
       if (oiageRecord?.is_active) {
         await advanceOiage(oiageRecord, target.suggested_amount);
-        setOiageRecord((prev) =>
-          prev
-            ? {
-                ...prev,
-                current_kaime: prev.current_kaime + 1,
-                total_investment: prev.total_investment + target.suggested_amount,
-              }
-            : prev,
-        );
+        await refreshOiageState();
       }
     } else if (!isAuto) {
       setBetStatus(result?.message ?? '投票に失敗しました');
     }
+  };
+
+  const handleOiageReset = async () => {
+    if (!oiageRecord) return;
+    await resetOiage(oiageRecord.id);
+    await refreshOiageState();
+    setBetStatus('追い上げステップをリセットしました');
+  };
+
+  const handleOiageStop = async () => {
+    if (!oiageRecord) return;
+    await resetOiage(oiageRecord.id, { deactivate: true });
+    await refreshOiageState();
+    setBetStatus('追い上げを停止しました');
   };
 
   return (
@@ -293,6 +306,11 @@ export default function Dashboard() {
                   {oiageRecord?.is_active ? '稼働中' : '停止中'}
                 </span>
               </div>
+              {maxStepsReached && (
+                <p className="warning-text" style={{ marginBottom: '0.75rem' }}>
+                  最大ステップ {oiageConfig.maxSteps} に到達しました。リセットまたは停止を行ってください。
+                </p>
+              )}
               <div className="oiage-grid">
                 <div>
                   <p className="muted">現在ステップ</p>
@@ -310,6 +328,14 @@ export default function Dashboard() {
                   <p className="muted">目標利益</p>
                   <strong>¥{oiageConfig.targetProfit.toLocaleString()}</strong>
                 </div>
+              </div>
+              <div className="oiage-actions">
+                <button className="secondary" onClick={handleOiageReset} disabled={!oiageRecord}>
+                  勝利としてリセット
+                </button>
+                <button className="danger" onClick={handleOiageStop} disabled={!oiageRecord}>
+                  追い上げを停止
+                </button>
               </div>
             </div>
           </section>
