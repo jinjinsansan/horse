@@ -21,29 +21,9 @@ const JO_CODE_MAP: Record<string, { label: string; jraCode: string }> = {
 
 const FALLBACK_ROWS = 12;
 
-function fallbackOdds(joName: string, raceNo: number): OddsEntry[] {
-  const seed = `${joName}-${raceNo}`;
-  const pseudoRandom = (idx: number) => {
-    let hash = 0;
-    const source = seed + idx;
-    for (let i = 0; i < source.length; i += 1) {
-      hash = (hash << 5) - hash + source.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash % 1000) / 10 + 1.5;
-  };
-
-  return Array.from({ length: FALLBACK_ROWS }).map((_, idx) => ({
-    umaban: String(idx + 1).padStart(2, '0'),
-    odds: Number(pseudoRandom(idx + 1).toFixed(1)),
-    popularity: idx + 1,
-  }));
-}
-
-export async function fetchJraOdds(params: { joName: string; raceNo: number }) {
+export async function fetchJraOdds(params: { joName: string; raceNo: number }): Promise<OddsEntry[]> {
   const { joName, raceNo } = params;
   const meeting = JO_CODE_MAP[joName];
-  const defaults = fallbackOdds(joName, raceNo);
 
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   const page = await browser.newPage();
@@ -88,12 +68,12 @@ export async function fetchJraOdds(params: { joName: string; raceNo: number }) {
     );
 
     if (!rows.length) {
-      return defaults;
+      throw new Error('オッズ情報を取得できませんでした');
     }
     return rows.slice(0, FALLBACK_ROWS);
   } catch (error) {
-    console.warn('[odds-fetcher] failed to scrape JRA odds', error);
-    return defaults;
+    console.error('[odds-fetcher] failed to scrape JRA odds', error);
+    throw error;
   } finally {
     await browser.close();
   }

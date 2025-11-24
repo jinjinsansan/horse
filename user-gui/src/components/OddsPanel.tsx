@@ -37,7 +37,7 @@ export default function OddsPanel({ signal }: OddsPanelProps) {
       const list = await fetchJraOdds({ joName: target.jo_name, raceNo: target.race_no });
       setOdds(list);
     } catch (err) {
-      setError('オッズ取得に失敗しました');
+      setError(err instanceof Error ? err.message : 'オッズ取得に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -47,7 +47,7 @@ export default function OddsPanel({ signal }: OddsPanelProps) {
     <div className="odds-panel">
       <div className="odds-head">
         <div>
-          <p className="label">リアルタイムオッズ（擬似データ）</p>
+          <p className="label">リアルタイムオッズ</p>
           <h3>{signal.jo_name} {signal.race_no}R</h3>
         </div>
         <button className="secondary" onClick={() => loadOdds(signal)} disabled={loading}>
