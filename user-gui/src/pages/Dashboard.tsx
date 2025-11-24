@@ -35,69 +35,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const init = async () => {
-      const [{ data }] = await Promise.all([fetchTodaySignals(), loadProfile()]);
-      if (data) {
-        setSignals(data);
-        setSelectedSignal(data[0] ?? null);
-      }
-      setLoading(false);
-    };
-    init();
-
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToSignalFeed((signal) => {
-      setSignals((prev) => [signal, ...prev]);
-      setSelectedSignal(signal);
-      if (Notification.permission === 'granted') {
-        new Notification('新しい買い目が届きました', {
-          body: `${signal.jo_name} ${signal.race_no}R ${signal.bet_type_name}`,
-        });
-      }
-      if (autoBetEnabled) {
-        handleBetExecution(signal, true);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [autoBetEnabled, credentials]);
-
-  const todaysCount = useMemo(() => signals.length, [signals]);
-  const oiageCalculator = useMemo(() => createOiageCalculator({
-    baseAmount: oiageConfig.baseAmount,
-    targetProfit: oiageConfig.targetProfit,
-    maxSteps: oiageConfig.maxSteps,
-  }), [oiageConfig]);
-
-  const nextOiageAmount = useMemo(() => {
-    if (!oiageRecord) return oiageConfig.baseAmount;
-    return oiageCalculator.nextBetAmount({
-      currentStep: oiageRecord.current_kaime,
-      totalInvestment: oiageRecord.total_investment,
-    });
-  }, [oiageRecord, oiageCalculator, oiageConfig.baseAmount]);
-  const maxStepsReached = Boolean(oiageRecord?.is_active && oiageRecord.current_kaime >= oiageConfig.maxSteps);
-
-  const refreshOiageState = useCallback(async () => {
-    if (!userId) return;
-    const { data } = await fetchActiveOiage(userId, 8);
-    setOiageRecord(data ?? null);
-  }, [userId]);
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate('/login', { replace: true });
-  };
-
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     const { data: user } = await supabase.auth.getUser();
     if (!user.user) return;
     setUserId(user.user.id);
@@ -139,9 +77,52 @@ export default function Dashboard() {
     } else {
       setOiageRecord(null);
     }
-  }
+  }, []);
 
-  const handleBetExecution = async (target: BetSignal | null, isAuto = false) => {
+  useEffect(() => {
+    const init = async () => {
+      const [{ data }] = await Promise.all([fetchTodaySignals(), loadProfile()]);
+      if (data) {
+        setSignals(data);
+        setSelectedSignal(data[0] ?? null);
+      }
+      setLoading(false);
+    };
+    init();
+
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, [loadProfile]);
+
+  const todaysCount = useMemo(() => signals.length, [signals]);
+  const oiageCalculator = useMemo(() => createOiageCalculator({
+    baseAmount: oiageConfig.baseAmount,
+    targetProfit: oiageConfig.targetProfit,
+    maxSteps: oiageConfig.maxSteps,
+  }), [oiageConfig]);
+
+  const nextOiageAmount = useMemo(() => {
+    if (!oiageRecord) return oiageConfig.baseAmount;
+    return oiageCalculator.nextBetAmount({
+      currentStep: oiageRecord.current_kaime,
+      totalInvestment: oiageRecord.total_investment,
+    });
+  }, [oiageRecord, oiageCalculator, oiageConfig.baseAmount]);
+  const maxStepsReached = Boolean(oiageRecord?.is_active && oiageRecord.current_kaime >= oiageConfig.maxSteps);
+
+  const refreshOiageState = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await fetchActiveOiage(userId, 8);
+    setOiageRecord(data ?? null);
+  }, [userId]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/login', { replace: true });
+  };
+
+  const handleBetExecution = useCallback(async (target: BetSignal | null, isAuto = false) => {
     if (!target) return;
     if (!window.horsebet?.executeBet) {
       if (!isAuto) {
@@ -202,7 +183,26 @@ export default function Dashboard() {
     } else if (!isAuto) {
       setBetStatus(result?.message ?? '投票に失敗しました');
     }
-  };
+  }, [credentials, oiageRecord, refreshOiageState, userId]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToSignalFeed((signal) => {
+      setSignals((prev) => [signal, ...prev]);
+      setSelectedSignal(signal);
+      if (Notification.permission === 'granted') {
+        new Notification('新しい買い目が届きました', {
+          body: `${signal.jo_name} ${signal.race_no}R ${signal.bet_type_name}`,
+        });
+      }
+      if (autoBetEnabled) {
+        handleBetExecution(signal, true);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [autoBetEnabled, handleBetExecution]);
 
   const handleOiageReset = async () => {
     if (!oiageRecord) return;

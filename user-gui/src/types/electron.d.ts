@@ -20,6 +20,12 @@ interface RendererMinimalSignal {
   suggested_amount: number;
 }
 
+interface ExecuteBetResult {
+  success: boolean;
+  message?: string;
+  details?: unknown;
+}
+
 declare global {
   interface Window {
     horsebet?: {
@@ -30,7 +36,7 @@ declare global {
           spat4?: RendererSpatCredentials;
         };
         headless?: boolean;
-      }) => Promise<any>;
+      }) => Promise<ExecuteBetResult>;
       fetchOdds: (payload: { joName: string; raceNo: number }) => Promise<{
         success: boolean;
         message?: string;

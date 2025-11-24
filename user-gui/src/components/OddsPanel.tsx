@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { BetSignal } from '@horsebet/shared/types/database.types';
 import { fetchJraOdds } from '@/lib/api/odds';
 import type { OddsEntry } from '@/types/odds';
@@ -12,25 +12,7 @@ export default function OddsPanel({ signal }: OddsPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!signal || signal.race_type !== 'JRA') {
-      setOdds([]);
-      return;
-    }
-    loadOdds(signal);
-    const interval = setInterval(() => loadOdds(signal), 60_000);
-    return () => clearInterval(interval);
-  }, [signal?.id]);
-
-  if (!signal || signal.race_type !== 'JRA') {
-    return (
-      <div className="odds-panel">
-        <p className="muted">現在はJRAレースのみリアルタイムオッズを表示しています（地方競馬は準備中）</p>
-      </div>
-    );
-  }
-
-  const loadOdds = async (target: BetSignal) => {
+  const loadOdds = useCallback(async (target: BetSignal) => {
     setLoading(true);
     setError('');
     try {
@@ -41,7 +23,25 @@ export default function OddsPanel({ signal }: OddsPanelProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!signal || signal.race_type !== 'JRA') {
+      setOdds([]);
+      return;
+    }
+    loadOdds(signal);
+    const interval = setInterval(() => loadOdds(signal), 60_000);
+    return () => clearInterval(interval);
+  }, [loadOdds, signal]);
+
+  if (!signal || signal.race_type !== 'JRA') {
+    return (
+      <div className="odds-panel">
+        <p className="muted">現在はJRAレースのみリアルタイムオッズを表示しています（地方競馬は準備中）</p>
+      </div>
+    );
+  }
 
   return (
     <div className="odds-panel">

@@ -29,19 +29,19 @@ jobs:
           node-version: 20
 
       - name: Install shared dependencies
-        working-directory: horsebet-system/shared
+        working-directory: shared
         run: npm install
 
       - name: Build shared package
-        working-directory: horsebet-system/shared
+        working-directory: shared
         run: npm run build
 
       - name: Install GUI dependencies
-        working-directory: horsebet-system/user-gui
+        working-directory: user-gui
         run: npm install
 
       - name: Build Electron target
-        working-directory: horsebet-system/user-gui
+        working-directory: user-gui
         run: npm run electron:build:${{ matrix.target }}
 
       - name: Upload build artifact
@@ -49,5 +49,5 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: |
-            horsebet-system/user-gui/dist/**
+            user-gui/dist/**
           if-no-files-found: error
