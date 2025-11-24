@@ -350,6 +350,27 @@ select {
   font-size: 0.9rem;
 }
 
+.oiage-panel {
+  margin-top: 1.5rem;
+  border: 1px dashed #cbd5f5;
+  border-radius: 1.25rem;
+  padding: 1rem 1.2rem;
+  background: #eef2ff;
+}
+
+.oiage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.oiage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
 .muted {
   color: #94a3b8;
 }

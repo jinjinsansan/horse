@@ -4,6 +4,8 @@ import type { BetSignal } from '@shared/types/database.types';
 import { supabase } from '@/lib/supabase';
 import { fetchTodaySignals, subscribeToSignalFeed } from '@/lib/api/signals';
 import { logBetHistory } from '@/lib/api/history';
+import { fetchActiveOiage, advanceOiage, type OiageRecord } from '@/lib/api/oiage';
+import { createOiageCalculator } from '@/services/oiage-calculator';
 import OddsPanel from '@/components/OddsPanel';
 import { Bell, Settings as SettingsIcon, LogOut } from 'lucide-react';
 
@@ -27,6 +29,8 @@ export default function Dashboard() {
     spat4?: { userId: string; password: string };
   }>({});
   const [autoBetEnabled, setAutoBetEnabled] = useState(false);
+  const [oiageConfig, setOiageConfig] = useState({ baseAmount: 1000, maxSteps: 5, targetProfit: 10000 });
+  const [oiageRecord, setOiageRecord] = useState<OiageRecord | null>(null);
   const [betStatus, setBetStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -67,6 +71,19 @@ export default function Dashboard() {
   }, [autoBetEnabled, credentials]);
 
   const todaysCount = useMemo(() => signals.length, [signals]);
+  const oiageCalculator = useMemo(() => createOiageCalculator({
+    baseAmount: oiageConfig.baseAmount,
+    targetProfit: oiageConfig.targetProfit,
+    maxSteps: oiageConfig.maxSteps,
+  }), [oiageConfig]);
+
+  const nextOiageAmount = useMemo(() => {
+    if (!oiageRecord) return oiageConfig.baseAmount;
+    return oiageCalculator.nextBetAmount({
+      currentStep: oiageRecord.current_kaime,
+      totalInvestment: oiageRecord.total_investment,
+    });
+  }, [oiageRecord, oiageCalculator, oiageConfig.baseAmount]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -79,7 +96,7 @@ export default function Dashboard() {
     setUserId(user.user.id);
     const { data } = await supabase
       .from('user_profiles')
-      .select('display_name, ipat_credentials, spat4_credentials, auto_bet_enabled')
+      .select('display_name, ipat_credentials, spat4_credentials, auto_bet_enabled, settings')
       .eq('id', user.user.id)
       .single();
     if (data?.display_name) {
@@ -103,6 +120,17 @@ export default function Dashboard() {
             }
           : undefined,
       });
+      setOiageConfig({
+        baseAmount: data.settings?.oiage?.baseAmount ?? 1000,
+        maxSteps: data.settings?.oiage?.maxSteps ?? 5,
+        targetProfit: data.settings?.oiage?.targetProfit ?? 10000,
+      });
+    }
+    const { data: oiage } = await fetchActiveOiage(user.user.id, 8);
+    if (oiage) {
+      setOiageRecord(oiage);
+    } else {
+      setOiageRecord(null);
     }
   }
 
@@ -159,6 +187,18 @@ export default function Dashboard() {
           isAuto,
           result: 'pending',
         });
+      }
+      if (oiageRecord?.is_active) {
+        await advanceOiage(oiageRecord, target.suggested_amount);
+        setOiageRecord((prev) =>
+          prev
+            ? {
+                ...prev,
+                current_kaime: prev.current_kaime + 1,
+                total_investment: prev.total_investment + target.suggested_amount,
+              }
+            : prev,
+        );
       }
     } else if (!isAuto) {
       setBetStatus(result?.message ?? '投票に失敗しました');
@@ -246,6 +286,32 @@ export default function Dashboard() {
             </div>
             {betStatus && <p className="info" style={{ marginTop: '0.75rem' }}>{betStatus}</p>}
             <OddsPanel signal={selectedSignal} />
+            <div className="oiage-panel">
+              <div className="oiage-head">
+                <p className="label">追い上げ状況</p>
+                <span className={`status ${oiageRecord?.is_active ? 'active' : 'cancelled'}`}>
+                  {oiageRecord?.is_active ? '稼働中' : '停止中'}
+                </span>
+              </div>
+              <div className="oiage-grid">
+                <div>
+                  <p className="muted">現在ステップ</p>
+                  <strong>{oiageRecord?.current_kaime ?? 0} / {oiageConfig.maxSteps}</strong>
+                </div>
+                <div>
+                  <p className="muted">累計投資</p>
+                  <strong>¥{(oiageRecord?.total_investment ?? 0).toLocaleString()}</strong>
+                </div>
+                <div>
+                  <p className="muted">次回推奨額</p>
+                  <strong>¥{nextOiageAmount.toLocaleString()}</strong>
+                </div>
+                <div>
+                  <p className="muted">目標利益</p>
+                  <strong>¥{oiageConfig.targetProfit.toLocaleString()}</strong>
+                </div>
+              </div>
+            </div>
           </section>
         ) : (
           <div className="empty">左の一覧から買い目を選択してください</div>
