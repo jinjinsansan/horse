@@ -2,6 +2,8 @@
   "name": "user-gui",
   "private": true,
   "version": "0.0.0",
+  "description": "HorseBet Electron GUI",
+  "author": "HorseBet",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -10,7 +12,10 @@
     "build": "tsc -b && vite build && tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:build": "npm run build && electron-builder"
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
     "@horsebet/shared": "file:../shared",
@@ -53,6 +58,10 @@
     },
     "win": {
       "target": "nsis"
+    },
+    "mac": {
+      "target": ["zip"],
+      "category": "public.app-category.utilities"
     }
   }
 }

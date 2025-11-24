@@ -1,0 +1,53 @@
+name: Build Electron GUI
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'gui-v*'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+            artifact: HorseBet-win
+          - os: macos-latest
+            target: mac
+            artifact: HorseBet-mac
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install shared dependencies
+        working-directory: horsebet-system/shared
+        run: npm install
+
+      - name: Build shared package
+        working-directory: horsebet-system/shared
+        run: npm run build
+
+      - name: Install GUI dependencies
+        working-directory: horsebet-system/user-gui
+        run: npm install
+
+      - name: Build Electron target
+        working-directory: horsebet-system/user-gui
+        run: npm run electron:build:${{ matrix.target }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            horsebet-system/user-gui/dist/**
+          if-no-files-found: error
