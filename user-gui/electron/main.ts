@@ -29,10 +29,15 @@ autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 
 const createWindow = () => {
+  const iconPath = isDev
+    ? path.join(__dirname, '../../public/icon.png')
+    : path.join(__dirname, '../dist/icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: 'HorseBet User',
+    title: 'HorseBet AI',
+    icon: iconPath,
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
