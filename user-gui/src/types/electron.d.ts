@@ -42,6 +42,12 @@ declare global {
         message?: string;
         data?: unknown;
       }>;
+      checkUpdates: () => Promise<{ available: boolean; version?: string; error?: string }>;
+      downloadUpdate: () => Promise<{ success: boolean; message?: string }>;
+      installUpdate: () => Promise<void>;
+      onUpdateAvailable: (callback: (version: string) => void) => void;
+      onUpdateDownloaded: (callback: () => void) => void;
+      onUpdateError: (callback: (error: string) => void) => void;
     };
   }
 }

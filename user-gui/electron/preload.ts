@@ -31,4 +31,16 @@ contextBridge.exposeInMainWorld('horsebet', {
   }) => ipcRenderer.invoke('horsebet:execute-bet', payload),
   fetchOdds: (payload: { joName: string; raceNo: number }) =>
     ipcRenderer.invoke('horsebet:fetch-odds', payload),
+  checkUpdates: () => ipcRenderer.invoke('horsebet:check-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('horsebet:download-update'),
+  installUpdate: () => ipcRenderer.invoke('horsebet:install-update'),
+  onUpdateAvailable: (callback: (version: string) => void) => {
+    ipcRenderer.on('horsebet:update-available', (_event, version) => callback(version));
+  },
+  onUpdateDownloaded: (callback: () => void) => {
+    ipcRenderer.on('horsebet:update-downloaded', () => callback());
+  },
+  onUpdateError: (callback: (error: string) => void) => {
+    ipcRenderer.on('horsebet:update-error', (_event, error) => callback(error));
+  },
 });

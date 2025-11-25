@@ -7,6 +7,7 @@ import { logBetHistory } from '@/lib/api/history';
 import { fetchActiveOiage, advanceOiage, resetOiage, type OiageRecord } from '@/lib/api/oiage';
 import { createOiageCalculator } from '@/services/oiage-calculator';
 import OddsPanel from '@/components/OddsPanel';
+import { UpdateNotification } from '@/components/UpdateNotification';
 import { Bell, Settings as SettingsIcon, LogOut } from 'lucide-react';
 
 type MinimalSignal = {
@@ -343,6 +344,7 @@ export default function Dashboard() {
           <div className="empty">左の一覧から買い目を選択してください</div>
         )}
       </main>
+      <UpdateNotification />
     </div>
   );
 }
