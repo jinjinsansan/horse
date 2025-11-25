@@ -215,11 +215,12 @@ export default function Settings() {
       <div className="settings-card">
         <header>
           <div>
-            <p className="label">設定</p>
-            <h1>自動投票 / 認証情報</h1>
+            <p className="label">SYSTEM SETTINGS</p>
+            <h1>⚙️ システム設定</h1>
+            <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>自動投票 / 認証情報 / 追い上げ設定</p>
           </div>
           <button className="secondary" onClick={() => navigate(-1)}>
-            戻る
+            ← 戻る
           </button>
         </header>
 

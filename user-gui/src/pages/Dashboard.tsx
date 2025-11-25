@@ -305,12 +305,13 @@ export default function Dashboard() {
       <main className="content">
         <header className="content-header">
           <div>
-            <p className="label">ようこそ</p>
-            <h1>{profileName || '会員'}</h1>
-            <p className="muted">本日の買い目: {todaysCount} 件</p>
+            <p className="label">ようこそ、{profileName || '会員'} 様</p>
+            <h1>買い目ダッシュボード</h1>
+            <p className="muted">本日の買い目配信: {todaysCount} 件</p>
           </div>
           <div className="pill">
-            <Bell size={16} /> 通知ON
+            <Bell size={20} />
+            <span>LIVE 配信中</span>
           </div>
         </header>
 

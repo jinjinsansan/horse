@@ -1,0 +1,490 @@
+:root {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #0f172a;
+  background: #f5f6fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f6fb;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.splash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+}
+
+.splash-card {
+  background: white;
+  padding: 2rem 3rem;
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15);
+}
+
+.splash-card .text {
+  font-size: 1.1rem;
+  color: #1f2937;
+}
+
+.login-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  padding: 2rem;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: white;
+  padding: 2.5rem;
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.15);
+}
+
+.login-card .title {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+}
+
+.login-card .subtitle {
+  margin: 0 0 2rem;
+  color: #6b7280;
+}
+
+.login-card .form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.login-card label {
+  font-size: 0.9rem;
+  color: #475569;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.login-card input {
+  border: 1px solid #d5d9e4;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.login-card button {
+  border: none;
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-card button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.login-card .error {
+  margin: 0;
+  color: #dc2626;
+  font-size: 0.85rem;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sidebar-title {
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.signal-item {
+  border: 1px solid transparent;
+  border-radius: 1rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  text-align: left;
+  display: flex;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.signal-item.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.signal-time {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.signal-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.signal-subtitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sidebar-footer .link {
+  border: none;
+  background: none;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.content {
+  padding: 2rem 3rem;
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.content-header .label {
+  color: #94a3b8;
+  margin: 0;
+}
+
+.label {
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+}
+
+.content-header h1 {
+  margin: 0.2rem 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.detail-card {
+  margin-top: 2rem;
+  background: white;
+  border-radius: 1.5rem;
+  padding: 2rem;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08);
+}
+
+.detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-head h2 {
+  margin: 0.2rem 0;
+}
+
+.status {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: #ecfccb;
+  color: #3f6212;
+}
+
+.status.cancelled {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.status.completed {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.note {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #fef9c3;
+  border-radius: 1rem;
+}
+
+.kaime-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.kaime {
+  display: inline-flex;
+  justify-content: center;
+  padding: 0.6rem;
+  border-radius: 0.9rem;
+  background: #f1f5f9;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.actions .primary {
+  flex: 1;
+  border: none;
+  border-radius: 0.9rem;
+  padding: 0.85rem;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.actions .secondary {
+  flex: 1;
+  border-radius: 0.9rem;
+  border: 1px solid #dbe0ea;
+  background: white;
+  cursor: pointer;
+}
+
+.odds-panel {
+  margin-top: 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+}
+
+.odds-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.odds-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.odds-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.odds-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.error-text {
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.oiage-panel {
+  margin-top: 1.5rem;
+  border: 1px dashed #cbd5f5;
+  border-radius: 1.25rem;
+  padding: 1rem 1.2rem;
+  background: #eef2ff;
+}
+
+.oiage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.oiage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.oiage-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.oiage-actions button {
+  flex: 1;
+  border-radius: 1rem;
+  padding: 0.6rem 0.8rem;
+  font-weight: 600;
+}
+
+.oiage-actions .danger {
+  border: 1px solid #f87171;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.warning-text {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+.empty {
+  margin-top: 4rem;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.settings-page {
+  min-height: 100vh;
+  background: #f5f6fb;
+  padding: 3rem;
+}
+
+.settings-card {
+  max-width: 760px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 1.5rem;
+  padding: 2.5rem;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+}
+
+.settings-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-card section {
+  margin-top: 2rem;
+}
+
+.settings-card h2 {
+  margin: 0 0 0.5rem;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #475569;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: #475569;
+}
+
+.grid input {
+  border: 1px solid #cbd5f5;
+  border-radius: 0.9rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.actions .primary:disabled {
+  opacity: 0.6;
+}
+
+.secondary {
+  border: 1px solid #d1d5db;
+  border-radius: 0.9rem;
+  padding: 0.6rem 1.2rem;
+  background: white;
+  cursor: pointer;
+}
+
+.info {
+  color: #2563eb;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}

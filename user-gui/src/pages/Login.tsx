@@ -32,8 +32,8 @@ export default function Login() {
   return (
     <div className="login-wrapper">
       <div className="login-card">
-        <h1 className="title">HorseBet</h1>
-        <p className="subtitle">会員IDとパスワードを入力してください</p>
+        <h1 className="title">🏇 HorseBet AI</h1>
+        <p className="subtitle">革命的競馬自動投票システム</p>
         <form className="form" onSubmit={handleSubmit}>
           <label>
             ユーザーID
