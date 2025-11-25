@@ -322,6 +322,39 @@ export default function Settings() {
         </section>
 
         <section>
+          <h2>投票ブラウザセットアップ</h2>
+          <div style={{ padding: '1rem', backgroundColor: '#fef3c7', borderRadius: '0.5rem', marginBottom: '1rem' }}>
+            <p style={{ fontWeight: '600', marginBottom: '0.5rem' }}>⚠️ 初回セットアップが必要です</p>
+            <p style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+              自動投票機能を使用するには、Playwrightブラウザのインストールが必要です。
+            </p>
+            <p style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+              インストール手順：
+            </p>
+            <ol style={{ fontSize: '0.875rem', marginLeft: '1.5rem', lineHeight: '1.75' }}>
+              <li>Windowsキーを押して「cmd」と入力し、コマンドプロンプトを開く</li>
+              <li>以下のコマンドをコピー＆ペーストして Enter を押す：</li>
+            </ol>
+            <div style={{ 
+              backgroundColor: '#1f2937', 
+              color: '#f3f4f6', 
+              padding: '0.75rem', 
+              borderRadius: '0.375rem', 
+              fontFamily: 'monospace',
+              fontSize: '0.875rem',
+              marginTop: '0.5rem',
+              marginBottom: '0.5rem',
+              userSelect: 'all'
+            }}>
+              npx playwright install chromium
+            </div>
+            <p style={{ fontSize: '0.875rem' }}>
+              ※ インストールは初回のみ必要で、約1-2分かかります。
+            </p>
+          </div>
+        </section>
+
+        <section>
           <h2>アプリ更新</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
