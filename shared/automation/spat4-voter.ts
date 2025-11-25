@@ -301,6 +301,12 @@ export class Spat4Voter {
         if (linkText?.trim() === `${targetRaceNo}R`) {
           foundRaceRow = true;
           this.log(`Found race ${targetRaceNo}R`);
+          
+          // デバッグ：この行の全リンクテキストを出力
+          const allLinksInRow = await Promise.all(
+            links.map(async (link) => await link.textContent())
+          );
+          this.log(`All links in race ${targetRaceNo}R row:`, allLinksInRow);
         } else if (foundRaceRow && linkText?.trim() === 'オッズ投票') {
           this.log('Clicking オッズ投票 link');
           this.currentKaimeIdx = 1; // 元のコードのiin_kaime_idx = 1
@@ -605,10 +611,28 @@ export class Spat4Voter {
             if (this.currentKaimeIdx > this.betInfoList.length) {
               // すべての買い目設定完了 → 投票確認へ
               this.log('All kaime input completed, moving to confirm');
+              
+              // 現在のフレーム状態をログ
+              this.log('Current frame URL:', frame.url());
+              
               const confirmBtn = frame.locator('input[value="投票内容確認へ"]');
+              
+              if (!(await confirmBtn.count())) {
+                this.log('投票内容確認へ button not found, checking page content');
+                const bodyText = await frame.locator('body').textContent();
+                this.log('Frame body preview:', bodyText?.substring(0, 300));
+                throw new Error('投票内容確認へ button not found');
+              }
+              
               await page.waitForTimeout(1000);
+              this.log('Clicking 投票内容確認へ button');
               await confirmBtn.click();
-              await page.waitForLoadState('networkidle');
+              
+              // クリック後のフレーム状態をログ
+              await page.waitForTimeout(2000);
+              const allFrameUrls = page.frames().map(f => f.url());
+              this.log('After clicking confirm, frame URLs:', allFrameUrls);
+              
               return;
             }
             
@@ -624,26 +648,77 @@ export class Spat4Voter {
   }
 
   /**
-   * 投票確認・実行画面の処理
+   * 投票確認・実行画面の処理（P202S → P203S）
    */
   private async handleVoteConfirmPage(): Promise<void> {
     const page = this.ensurePage();
     
-    this.log('Handling vote confirm page');
-    
-    // P001Sに戻るのを待つ
-    await page.waitForURL('**/keiba/pc', { timeout: 15000 });
+    this.log('Handling vote confirm page (P202S)');
     
     if (!this.credentials) {
       throw new Error('認証情報がありません');
     }
     
+    // P202Sフレームを探す（投票内容確認画面）
+    // フレームが表示されるまで最大10秒待つ
+    let p202Frame: Frame | null = null;
+    const maxAttempts = 20; // 10秒間（500ms x 20回）
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await page.waitForTimeout(500);
+      
+      const frames = page.frames();
+      this.log(`Attempt ${attempt + 1}/${maxAttempts}: Checking ${frames.length} frames`);
+      
+      for (const frame of frames) {
+        const url = frame.url();
+        if (url.includes('HANDLERR=P202S')) {
+          p202Frame = frame;
+          this.log('Found P202S frame:', url);
+          break;
+        }
+      }
+      
+      if (p202Frame) {
+        break;
+      }
+    }
+    
+    if (!p202Frame) {
+      // デバッグ用：すべてのフレームのURLを出力
+      const allFrameUrls = page.frames().map(f => f.url());
+      this.log('All frame URLs:', allFrameUrls);
+      
+      // P902SまたはP901フレームがあればその内容を確認（エラーメッセージの可能性）
+      for (const frame of page.frames()) {
+        const url = frame.url();
+        if (url.includes('P902S') || url.includes('P901')) {
+          this.log(`Checking ${url.includes('P902S') ? 'P902S' : 'P901'} frame content:`);
+          const content = await frame.locator('body').textContent();
+          this.log('Frame content:', content?.substring(0, 500));
+        }
+      }
+      
+      // P121Sフレームの内容も確認（まだ残っている場合）
+      for (const frame of page.frames()) {
+        const url = frame.url();
+        if (url.includes('P121S')) {
+          this.log('P121S frame still exists, checking content:');
+          const content = await frame.locator('body').innerHTML();
+          this.log('P121S HTML preview:', content?.substring(0, 800));
+        }
+      }
+      
+      throw new Error('P202S frame not found after 10 seconds - check P902S/P901 for errors');
+    }
+    
     // 暗証番号入力
-    this.log('Filling password');
-    await page.locator('[name="MEMBERPASSR"]').fill(this.credentials.password);
+    this.log('Filling password in P202S');
+    const passwordInput = p202Frame.locator('input[name="MEMBERPASSR"]');
+    await passwordInput.fill(this.credentials.password);
     
     // 合計金額を取得して設定
-    const betTable = page.locator('#BET_TBL');
+    const betTable = p202Frame.locator('table#BET_TBL');
     
     if (await betTable.count()) {
       const rows = await betTable.locator('tr').all();
@@ -659,7 +734,8 @@ export class Spat4Voter {
             foundLabel = true;
           } else if (foundLabel && cellText?.includes('円')) {
             const totalAmount = cellText.trim().replace('円', '').replace(',', '');
-            await page.locator('[name="TOTALMONEYR"]').fill(totalAmount);
+            const totalMoneyInput = p202Frame.locator('input[name="TOTALMONEYR"]');
+            await totalMoneyInput.fill(totalAmount);
             this.log(`Set total amount: ${totalAmount}`);
             break;
           }
@@ -667,28 +743,53 @@ export class Spat4Voter {
       }
     }
     
-    // 投票実行
-    this.log('Executing vote');
-    await page.locator('[name="KYOUSEI"]').click();
-    await page.waitForLoadState('networkidle');
+    // 投票実行ボタンをクリック
+    this.log('Clicking vote execution button');
+    const executeBtn = p202Frame.locator('input[name="KYOUSEI"]');
+    await executeBtn.click();
     
-    // 結果確認
-    const bodyHtml = await page.locator('body').innerHTML();
+    // P203S（完了画面）を待つ
+    await page.waitForTimeout(3000);
     
-    if (bodyHtml.includes('購入限度額を超えています')) {
+    let p203Frame: Frame | null = null;
+    const newFrames = page.frames();
+    
+    for (const frame of newFrames) {
+      const url = frame.url();
+      if (url.includes('HANDLERR=P203S')) {
+        p203Frame = frame;
+        this.log('Found P203S frame (completion):', url);
+        break;
+      }
+    }
+    
+    if (!p203Frame) {
+      this.log('Warning: P203S frame not found, checking for errors');
+    }
+    
+    // エラーチェック
+    const frameContent = p203Frame 
+      ? await p203Frame.locator('body').textContent() 
+      : await p202Frame.locator('body').textContent();
+    
+    if (frameContent?.includes('購入限度額を超えています')) {
       throw new Error('購入限度額を超えています');
     }
     
-    // this.voteState = VoteState.COMPLETED;
+    if (frameContent?.includes('エラー') || frameContent?.includes('失敗')) {
+      throw new Error('投票に失敗しました: ' + frameContent.substring(0, 200));
+    }
+    
     this.log('Vote completed successfully');
   }
 
   /**
    * 取消馬番の取得
+   * オッズ表に表示されていない馬番を取消馬として返す
    */
   private async getCanceledUmabans(): Promise<number[]> {
     const page = this.ensurePage();
-    const canceledList: number[] = [];
+    const validUmabans: number[] = []; // オッズ表に表示されている有効な馬番
     
     this.log('Getting canceled umabans');
     
@@ -732,8 +833,8 @@ export class Spat4Voter {
           
           if (cellText && !isNaN(Number(cellText))) {
             const umaban = Number(cellText);
-            if (!canceledList.includes(umaban)) {
-              canceledList.push(umaban);
+            if (!validUmabans.includes(umaban)) {
+              validUmabans.push(umaban);
             }
             break;
           }
@@ -743,12 +844,13 @@ export class Spat4Voter {
       break;
     }
     
-    // 全馬番から取消馬番を除外して、取消馬番リストを生成
+    // 全馬番（1-18）から有効な馬番を除外 = 取消馬番
     const allUmabans = Array.from({ length: 18 }, (_, i) => i + 1);
-    const actualCanceled = allUmabans.filter((u) => !canceledList.includes(u));
+    const canceledUmabans = allUmabans.filter((u) => !validUmabans.includes(u));
     
-    this.log('Canceled umabans:', actualCanceled);
-    return actualCanceled;
+    this.log('Valid umabans:', validUmabans);
+    this.log('Canceled umabans:', canceledUmabans);
+    return canceledUmabans;
   }
 
   /**
