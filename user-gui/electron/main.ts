@@ -67,6 +67,10 @@ ipcMain.handle('horsebet:fetch-odds', async (_event, payload: { joName: string; 
   }
 });
 
+ipcMain.handle('horsebet:get-version', () => {
+  return app.getVersion();
+});
+
 ipcMain.handle('horsebet:check-updates', async () => {
   if (isDev) return { available: false };
   try {

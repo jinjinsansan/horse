@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { upsertOiageState, fetchActiveOiage } from '@/lib/api/oiage';
+import { RefreshCw, Download, CheckCircle } from 'lucide-react';
 
 interface CredentialForm {
   ipatId: string;
@@ -32,6 +33,14 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
+
+  const [currentVersion, setCurrentVersion] = useState('');
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [latestVersion, setLatestVersion] = useState('');
+  const [updateDownloading, setUpdateDownloading] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -66,9 +75,59 @@ export default function Settings() {
           oiageTargetProfit: oiage.target_profit,
         }));
       }
+
+      if (window.horsebet) {
+        const version = await window.horsebet.getVersion();
+        setCurrentVersion(version);
+
+        window.horsebet.onUpdateAvailable((newVersion) => {
+          setUpdateAvailable(true);
+          setLatestVersion(newVersion);
+          setUpdateMessage(`新しいバージョン ${newVersion} が利用可能です`);
+        });
+
+        window.horsebet.onUpdateDownloaded(() => {
+          setUpdateDownloading(false);
+          setUpdateReady(true);
+          setUpdateMessage('更新のダウンロードが完了しました');
+        });
+
+        window.horsebet.onUpdateError((error) => {
+          setUpdateDownloading(false);
+          setUpdateMessage(`エラー: ${error}`);
+        });
+      }
     };
     load();
   }, []);
+
+  const handleCheckUpdate = async () => {
+    if (!window.horsebet) return;
+    setUpdateChecking(true);
+    setUpdateMessage('更新を確認中...');
+    const result = await window.horsebet.checkUpdates();
+    setUpdateChecking(false);
+    if (result.available && result.version) {
+      setUpdateAvailable(true);
+      setLatestVersion(result.version);
+      setUpdateMessage(`新しいバージョン ${result.version} が利用可能です`);
+    } else {
+      setUpdateMessage('最新版です');
+      setTimeout(() => setUpdateMessage(''), 3000);
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    if (!window.horsebet) return;
+    setUpdateDownloading(true);
+    setUpdateMessage('ダウンロード中...');
+    await window.horsebet.downloadUpdate();
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!window.horsebet) return;
+    await window.horsebet.installUpdate();
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -259,6 +318,71 @@ export default function Settings() {
                 onChange={(event) => setCred((prev) => ({ ...prev, spatPassword: event.target.value }))}
               />
             </label>
+          </div>
+        </section>
+
+        <section>
+          <h2>アプリ更新</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p className="muted">現在のバージョン</p>
+                <p style={{ fontSize: '1.25rem', fontWeight: '600', marginTop: '0.25rem' }}>
+                  {currentVersion ? `v${currentVersion}` : '読み込み中...'}
+                </p>
+              </div>
+              <button
+                className="secondary"
+                onClick={handleCheckUpdate}
+                disabled={updateChecking || updateDownloading}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <RefreshCw size={16} className={updateChecking ? 'spin' : ''} />
+                {updateChecking ? '確認中...' : '更新をチェック'}
+              </button>
+            </div>
+
+            {updateMessage && (
+              <div
+                style={{
+                  padding: '0.75rem 1rem',
+                  borderRadius: '0.5rem',
+                  backgroundColor: updateAvailable ? '#dbeafe' : updateReady ? '#dcfce7' : '#f3f4f6',
+                  color: updateAvailable ? '#1e40af' : updateReady ? '#166534' : '#374151',
+                }}
+              >
+                {updateMessage}
+              </div>
+            )}
+
+            {updateAvailable && !updateReady && (
+              <button
+                className="primary"
+                onClick={handleDownloadUpdate}
+                disabled={updateDownloading}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}
+              >
+                <Download size={16} />
+                {updateDownloading ? 'ダウンロード中...' : `v${latestVersion} をダウンロード`}
+              </button>
+            )}
+
+            {updateReady && (
+              <button
+                className="primary"
+                onClick={handleInstallUpdate}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  justifyContent: 'center',
+                  backgroundColor: '#16a34a',
+                }}
+              >
+                <CheckCircle size={16} />
+                再起動してインストール
+              </button>
+            )}
           </div>
         </section>
 
