@@ -9,7 +9,8 @@ export const BET_TYPES = {
   8: '3連単'
 } as const;
 
-export const JO_CODES = {
+// JRA競馬場コード
+export const JRA_JO_CODES = {
   '01': '札幌',
   '02': '函館',
   '03': '福島',
@@ -20,6 +21,31 @@ export const JO_CODES = {
   '08': '京都',
   '09': '阪神',
   '10': '小倉'
+} as const;
+
+// NAR（地方競馬）競馬場コード
+export const NAR_JO_CODES = {
+  '30': '門別',
+  '31': '盛岡',
+  '32': '水沢',
+  '33': '浦和',
+  '34': '船橋',
+  '35': '大井',
+  '36': '川崎',
+  '37': '金沢',
+  '38': '笠松',
+  '39': '名古屋',
+  '40': '園田',
+  '41': '姫路',
+  '42': '高知',
+  '43': '佐賀',
+  '44': '帯広'
+} as const;
+
+// 全競馬場コード（統合）
+export const JO_CODES = {
+  ...JRA_JO_CODES,
+  ...NAR_JO_CODES
 } as const;
 
 export interface CreateSignalRequest {

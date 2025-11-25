@@ -20,8 +20,11 @@ export async function fetchActiveOiage(userId: string, betType = 8) {
     .eq('user_id', userId)
     .eq('bet_type', betType)
     .eq('is_active', true)
-    .single();
-  return { data: data as (OiageRecord & { base_amount?: number; max_steps?: number }) | null, error };
+    .order('updated_at', { ascending: false })
+    .limit(1);
+
+  const record = (data?.[0] as (OiageRecord & { base_amount?: number; max_steps?: number }) | undefined) ?? null;
+  return { data: record, error };
 }
 
 export async function upsertOiageState(params: {

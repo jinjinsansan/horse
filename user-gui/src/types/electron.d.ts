@@ -6,8 +6,8 @@ interface RendererIpatCredentials {
 }
 
 interface RendererSpatCredentials {
-  userId: string;
-  password: string;
+  memberNumber: string;
+  memberId: string;
 }
 
 interface RendererMinimalSignal {
@@ -23,6 +23,7 @@ interface RendererMinimalSignal {
 interface ExecuteBetResult {
   success: boolean;
   message?: string;
+  detail?: unknown;
   details?: unknown;
 }
 
@@ -43,6 +44,7 @@ declare global {
         data?: unknown;
       }>;
       getVersion: () => Promise<string>;
+      isPlaywrightReady: () => Promise<boolean>;
       checkUpdates: () => Promise<{ available: boolean; version?: string; error?: string }>;
       downloadUpdate: () => Promise<{ success: boolean; message?: string }>;
       installUpdate: () => Promise<void>;

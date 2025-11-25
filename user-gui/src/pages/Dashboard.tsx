@@ -12,12 +12,31 @@ import { Bell, Settings as SettingsIcon, LogOut } from 'lucide-react';
 
 type MinimalSignal = {
   id: number;
+  signal_date: string;
   race_type: 'JRA' | 'NAR';
   jo_name: string;
   race_no: number;
   bet_type_name: string;
   kaime_data: string[];
   suggested_amount: number;
+};
+
+type RawSpatCredentials = Record<string, string | number | undefined> | null | undefined;
+
+const normalizeCredential = (value: unknown) => {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const mapSpatCredentials = (raw: RawSpatCredentials) => {
+  if (!raw) return undefined;
+  const memberNumber = normalizeCredential(raw.member_number ?? raw.memberNumber ?? raw.user_id ?? '');
+  const memberId = normalizeCredential(raw.member_id ?? raw.memberId ?? raw.password ?? '');
+  const password = normalizeCredential(raw.spat_password ?? raw.ansho ?? '');
+  if (!memberNumber || !memberId) return undefined;
+  return { memberNumber, memberId, password };
 };
 
 export default function Dashboard() {
@@ -27,7 +46,7 @@ export default function Dashboard() {
   const [userId, setUserId] = useState('');
   const [credentials, setCredentials] = useState<{
     ipat?: { inetId: string; userCode: string; password: string; pin: string };
-    spat4?: { userId: string; password: string };
+    spat4?: { memberNumber: string; memberId: string; password: string };
   }>({});
   const [autoBetEnabled, setAutoBetEnabled] = useState(false);
   const [oiageConfig, setOiageConfig] = useState({ baseAmount: 1000, maxSteps: 5, targetProfit: 10000 });
@@ -50,13 +69,15 @@ export default function Dashboard() {
     }
     if (data) {
       setAutoBetEnabled(data.auto_bet_enabled ?? false);
+      const mappedSpat = mapSpatCredentials(data.spat4_credentials ?? undefined);
       console.log('[Dashboard] Loaded credentials:', {
         hasIpatInetId: !!data.ipat_credentials?.inet_id,
         hasIpatUserCode: !!data.ipat_credentials?.user_cd,
         hasIpatPassword: !!data.ipat_credentials?.password,
         hasIpatPin: !!data.ipat_credentials?.pin,
-        hasSpatUserId: !!data.spat4_credentials?.user_id,
-        hasSpatPassword: !!data.spat4_credentials?.password,
+        hasSpatMemberNumber: !!mappedSpat?.memberNumber,
+        hasSpatMemberId: !!mappedSpat?.memberId,
+        hasSpatPassword: !!mappedSpat?.password,
       });
       setCredentials({
         ipat: data.ipat_credentials?.inet_id
@@ -67,12 +88,7 @@ export default function Dashboard() {
               pin: data.ipat_credentials.pin ?? '',
             }
           : undefined,
-        spat4: data.spat4_credentials?.user_id
-          ? {
-              userId: data.spat4_credentials.user_id ?? '',
-              password: data.spat4_credentials.password ?? '',
-            }
-          : undefined,
+        spat4: mappedSpat,
       });
       setOiageConfig({
         baseAmount: data.settings?.oiage?.baseAmount ?? 1000,
@@ -159,6 +175,7 @@ export default function Dashboard() {
     }
     const signalPayload: MinimalSignal = {
       id: target.id,
+      signal_date: target.signal_date,
       race_type: target.race_type,
       jo_name: target.jo_name,
       race_no: target.race_no,
@@ -199,8 +216,10 @@ export default function Dashboard() {
           await refreshOiageState();
         }
       } else {
-        const errorMsg = result?.details 
-          ? `${result.message}: ${result.details}` 
+        const detailMessage = result?.details ?? result?.detail;
+        const detailText = detailMessage ? String(detailMessage) : '';
+        const errorMsg = detailText
+          ? `${result?.message ?? '投票に失敗しました'}: ${detailText}`
           : result?.message ?? '投票に失敗しました';
         if (!isAuto) {
           setBetStatus(errorMsg);

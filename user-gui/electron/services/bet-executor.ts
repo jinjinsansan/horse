@@ -6,14 +6,25 @@ import {
   type Spat4Credentials,
   type Spat4BetRequest,
 } from '@horsebet/shared/automation';
+import { app } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
 
 type MinimalBetSignal = {
+  signal_date: string; // 開催日
   race_type: 'JRA' | 'NAR';
   jo_name: string;
   race_no: number;
   bet_type_name: string;
   kaime_data: string[];
   suggested_amount: number;
+};
+
+type VoteOutcome = {
+  success: boolean;
+  message?: string;
+  detail?: unknown;
+  details?: unknown;
 };
 
 export interface BetExecutionPayload {
@@ -23,6 +34,31 @@ export interface BetExecutionPayload {
     spat4?: Spat4Credentials;
   };
   headless?: boolean;
+}
+
+const ensureDir = (dir: string) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+};
+
+const getSpat4ProfileDir = (() => {
+  let cached: string | null = null;
+  return () => {
+    if (!cached) {
+      const dir = path.join(app.getPath('userData'), 'playwright', 'spat4');
+      ensureDir(dir);
+      cached = dir;
+    }
+    return cached;
+  };
+})();
+
+function normalizeResult<T extends VoteOutcome>(result: T): T {
+  if (result && result.detail && !result.details) {
+    return { ...result, details: result.detail };
+  }
+  return result;
 }
 
 export async function executeBet(payload: BetExecutionPayload) {
@@ -49,28 +85,51 @@ export async function executeBet(payload: BetExecutionPayload) {
       };
       const result = await executeIpatVote(payload.credentials.ipat, request, { headless });
       console.log('[bet-executor] IPAT result:', result);
-      return result;
+      return normalizeResult(result);
     }
 
     if (!payload.credentials.spat4) {
       return { success: false, message: 'SPAT4認証情報が設定されていません' };
     }
 
-    console.log('[bet-executor] Executing SPAT4 vote...');
-    const voter = new Spat4Voter();
+    const profileDir = getSpat4ProfileDir();
+    console.log('[bet-executor] Executing SPAT4 vote...', { profileDir, credentials: payload.credentials.spat4 });
+
+    const memberNumber = payload.credentials.spat4.memberNumber?.toString().trim();
+    const memberId = payload.credentials.spat4.memberId?.toString().trim();
+    const password = payload.credentials.spat4.password?.toString().trim();
+    
+    if (!memberNumber || !memberId) {
+      return { success: false, message: 'SPAT4加入者番号または利用者IDが未入力です' };
+    }
+    
+    if (!password) {
+      return { success: false, message: 'SPAT4暗証番号が未入力です' };
+    }
+
+    const voter = new Spat4Voter({ profileDir });
     try {
       await voter.initialize(headless);
-      await voter.login(payload.credentials.spat4);
+      await voter.login({ memberNumber, memberId, password });
+      
+      // 買い目データを配列に変換（現在は1つの買い目のみサポート）
+      const kaimeNumbers = signal.kaime_data.map((k: string) => {
+        const num = parseInt(k, 10);
+        return isNaN(num) ? 0 : num;
+      });
+      
       const request: Spat4BetRequest = {
+        kaisaiDate: new Date(signal.signal_date),
         joName: signal.jo_name,
         raceNo: signal.race_no,
-        betTypeName: signal.bet_type_name,
-        kaime: signal.kaime_data,
+        betType: signal.bet_type_name,
+        kaime: kaimeNumbers,
         amount: signal.suggested_amount,
       };
-      const result = await voter.vote(request);
+      
+      const result = await voter.vote([request]);
       console.log('[bet-executor] SPAT4 result:', result);
-      return result;
+      return normalizeResult(result);
     } finally {
       await voter.close();
     }
@@ -79,6 +138,7 @@ export async function executeBet(payload: BetExecutionPayload) {
     return {
       success: false,
       message: '投票処理中にエラーが発生しました',
+      detail: error instanceof Error ? error.message : String(error),
       details: error instanceof Error ? error.message : String(error),
     };
   }

@@ -9,12 +9,20 @@ interface CredentialForm {
   ipatUserCode: string;
   ipatPassword: string;
   ipatPin: string;
-  spatId: string;
-  spatPassword: string;
+  spatMemberNumber: string;
+  spatMemberId: string;
+  spatPassword: string; // SPAT4暗証番号
   oiageBaseAmount: number;
   oiageTargetProfit: number;
   oiageMaxSteps: number;
 }
+
+const normalizeCredentialValue = (value: unknown) => {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
 
 export default function Settings() {
   const [autoBetEnabled, setAutoBetEnabled] = useState(false);
@@ -23,7 +31,8 @@ export default function Settings() {
     ipatUserCode: '',
     ipatPassword: '',
     ipatPin: '',
-    spatId: '',
+    spatMemberNumber: '',
+    spatMemberId: '',
     spatPassword: '',
     oiageBaseAmount: 1000,
     oiageTargetProfit: 10000,
@@ -41,6 +50,7 @@ export default function Settings() {
   const [updateDownloading, setUpdateDownloading] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
   const [updateMessage, setUpdateMessage] = useState('');
+  const [playwrightReady, setPlaywrightReady] = useState(true);
 
   useEffect(() => {
     const load = async () => {
@@ -52,14 +62,19 @@ export default function Settings() {
         .eq('id', user.user.id)
         .single();
       if (data) {
+        const spatRaw = data.spat4_credentials ?? {};
+        const spatMemberNumber = normalizeCredentialValue(spatRaw.member_number ?? spatRaw.memberNumber ?? spatRaw.user_id ?? '');
+        const spatMemberId = normalizeCredentialValue(spatRaw.member_id ?? spatRaw.memberId ?? spatRaw.password ?? '');
+        const spatPassword = normalizeCredentialValue(spatRaw.spat_password ?? spatRaw.ansho ?? '');
         setAutoBetEnabled(data.auto_bet_enabled ?? false);
         setCred({
           ipatId: data.ipat_credentials?.inet_id ?? '',
           ipatUserCode: data.ipat_credentials?.user_cd ?? '',
           ipatPassword: data.ipat_credentials?.password ?? '',
           ipatPin: data.ipat_credentials?.pin ?? '',
-          spatId: data.spat4_credentials?.user_id ?? '',
-          spatPassword: data.spat4_credentials?.password ?? '',
+          spatMemberNumber,
+          spatMemberId,
+          spatPassword,
           oiageBaseAmount: data.settings?.oiage?.baseAmount ?? 1000,
           oiageTargetProfit: data.settings?.oiage?.targetProfit ?? 10000,
           oiageMaxSteps: data.settings?.oiage?.maxSteps ?? 5,
@@ -79,6 +94,13 @@ export default function Settings() {
       if (window.horsebet) {
         const version = await window.horsebet.getVersion();
         setCurrentVersion(version);
+
+        if (window.horsebet.isPlaywrightReady) {
+          const ready = await window.horsebet.isPlaywrightReady();
+          setPlaywrightReady(ready);
+        } else {
+          setPlaywrightReady(true);
+        }
 
         window.horsebet.onUpdateAvailable((newVersion) => {
           setUpdateAvailable(true);
@@ -161,8 +183,11 @@ export default function Settings() {
           pin: cred.ipatPin,
         },
         spat4_credentials: {
-          user_id: cred.spatId,
-          password: cred.spatPassword,
+          member_number: normalizeCredentialValue(cred.spatMemberNumber),
+          member_id: normalizeCredentialValue(cred.spatMemberId),
+          spat_password: normalizeCredentialValue(cred.spatPassword),
+          user_id: normalizeCredentialValue(cred.spatMemberNumber),
+          password: normalizeCredentialValue(cred.spatMemberId),
         },
         settings: mergedSettings,
       })
@@ -304,55 +329,81 @@ export default function Settings() {
           <h2>SPAT4 認証情報</h2>
           <div className="grid">
             <label>
-              ユーザーID
+              加入者番号
               <input
-                value={cred.spatId}
-                onChange={(event) => setCred((prev) => ({ ...prev, spatId: event.target.value }))}
+                value={cred.spatMemberNumber}
+                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberNumber: event.target.value }))}
+                placeholder="10桁"
               />
             </label>
             <label>
-              パスワード
+              利用者ID（パスワード）
+              <input
+                type="password"
+                value={cred.spatMemberId}
+                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberId: event.target.value }))}
+              />
+            </label>
+            <label>
+              暗証番号
               <input
                 type="password"
                 value={cred.spatPassword}
                 onChange={(event) => setCred((prev) => ({ ...prev, spatPassword: event.target.value }))}
+                placeholder="4桁"
               />
             </label>
           </div>
         </section>
 
-        <section>
-          <h2>投票ブラウザセットアップ</h2>
-          <div style={{ padding: '1rem', backgroundColor: '#fef3c7', borderRadius: '0.5rem', marginBottom: '1rem' }}>
-            <p style={{ fontWeight: '600', marginBottom: '0.5rem' }}>⚠️ 初回セットアップが必要です</p>
-            <p style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-              自動投票機能を使用するには、Playwrightブラウザのインストールが必要です。
-            </p>
-            <p style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-              インストール手順：
-            </p>
-            <ol style={{ fontSize: '0.875rem', marginLeft: '1.5rem', lineHeight: '1.75' }}>
-              <li>Windowsキーを押して「cmd」と入力し、コマンドプロンプトを開く</li>
-              <li>以下のコマンドをコピー＆ペーストして Enter を押す：</li>
-            </ol>
-            <div style={{ 
-              backgroundColor: '#1f2937', 
-              color: '#f3f4f6', 
-              padding: '0.75rem', 
-              borderRadius: '0.375rem', 
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-              marginTop: '0.5rem',
-              marginBottom: '0.5rem',
-              userSelect: 'all'
-            }}>
-              npx playwright install chromium
+        {!playwrightReady ? (
+          <section>
+            <h2>投票ブラウザセットアップ</h2>
+            <div style={{ padding: '1rem', backgroundColor: '#fef3c7', borderRadius: '0.5rem', marginBottom: '1rem' }}>
+              <p style={{ fontWeight: '600', marginBottom: '0.5rem' }}>⚠️ 初回セットアップが必要です</p>
+              <p style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+                自動投票機能を使用するには、Playwrightブラウザのインストールが必要です。
+              </p>
+              <p style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
+                インストール手順：
+              </p>
+              <ol style={{ fontSize: '0.875rem', marginLeft: '1.5rem', lineHeight: '1.75' }}>
+                <li>Windowsキーを押して「cmd」と入力し、コマンドプロンプトを開く</li>
+                <li>以下のコマンドをコピー＆ペーストして Enter を押す：</li>
+              </ol>
+              <div style={{ 
+                backgroundColor: '#1f2937', 
+                color: '#f3f4f6', 
+                padding: '0.75rem', 
+                borderRadius: '0.375rem', 
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                marginTop: '0.5rem',
+                marginBottom: '0.5rem',
+                userSelect: 'all'
+              }}>
+                npx playwright install chromium
+              </div>
+              <p style={{ fontSize: '0.875rem' }}>
+                ※ インストールは初回のみ必要で、約1-2分かかります。
+              </p>
             </div>
-            <p style={{ fontSize: '0.875rem' }}>
-              ※ インストールは初回のみ必要で、約1-2分かかります。
-            </p>
-          </div>
-        </section>
+          </section>
+        ) : (
+          <section>
+            <h2>投票ブラウザ</h2>
+            <div style={{
+              padding: '1rem',
+              backgroundColor: '#ecfccb',
+              borderRadius: '0.5rem',
+              marginBottom: '1rem',
+              color: '#365314',
+              fontSize: '0.9rem',
+            }}>
+              Playwrightブラウザはアプリに同梱済みのため、追加セットアップは不要です。
+            </div>
+          </section>
+        )}
 
         <section>
           <h2>アプリ更新</h2>

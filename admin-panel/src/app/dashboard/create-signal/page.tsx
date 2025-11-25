@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createSignal } from '@/lib/api/signals';
+import { JRA_JO_CODES, NAR_JO_CODES, BET_TYPES } from '@horsebet/shared/types/business.types';
 
 const schema = z.object({
   signal_date: z.string().min(1),
@@ -24,11 +25,15 @@ type SignalForm = z.infer<typeof schema>;
 export default function CreateSignalPage() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [raceType, setRaceType] = useState<'JRA' | 'NAR'>('JRA');
+  
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
     reset,
+    watch,
+    setValue,
   } = useForm<SignalForm>({
     resolver: zodResolver(schema) as Resolver<SignalForm>,
     defaultValues: {
@@ -41,6 +46,17 @@ export default function CreateSignalPage() {
       suggested_amount: 1000,
     },
   });
+
+  // race_typeの変更を監視
+  const currentRaceType = watch('race_type');
+  if (currentRaceType !== raceType) {
+    setRaceType(currentRaceType);
+    // race_typeが変わったら、最初の競馬場を選択
+    const firstCode = currentRaceType === 'JRA' 
+      ? Object.keys(JRA_JO_CODES)[0] 
+      : Object.keys(NAR_JO_CODES)[0];
+    setValue('jo_code', firstCode);
+  }
 
   const onSubmit = async (values: SignalForm) => {
     setError('');
@@ -117,9 +133,14 @@ export default function CreateSignalPage() {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                   {...register('jo_code')}
                 >
-                  <option value="05">東京</option>
-                  <option value="06">中山</option>
-                  <option value="09">阪神</option>
+                  {raceType === 'JRA' 
+                    ? Object.entries(JRA_JO_CODES).map(([code, name]) => (
+                        <option key={code} value={code}>{name}</option>
+                      ))
+                    : Object.entries(NAR_JO_CODES).map(([code, name]) => (
+                        <option key={code} value={code}>{name}</option>
+                      ))
+                  }
                 </select>
               </Field>
               <Field label="レース番号" error={errors.race_no?.message}>
@@ -136,11 +157,9 @@ export default function CreateSignalPage() {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                   {...register('bet_type')}
                 >
-                  <option value={1}>単勝</option>
-                  <option value={4}>馬連</option>
-                  <option value={6}>馬単</option>
-                  <option value={7}>3連複</option>
-                  <option value={8}>3連単</option>
+                  {Object.entries(BET_TYPES).map(([code, name]) => (
+                    <option key={code} value={code}>{name}</option>
+                  ))}
                 </select>
               </Field>
               <Field label="フォーメーション/方式" error={errors.method?.message}>
@@ -161,11 +180,20 @@ export default function CreateSignalPage() {
             </div>
 
             <Field label="買い目（1行1目）" error={errors.kaime_data?.message}>
+              <div className="mb-2 text-xs text-gray-600">
+                <p className="font-medium mb-1">入力形式：</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>単勝・複勝: 馬番のみ（例: 1）</li>
+                  <li>馬連・馬単・ワイド: 馬番-馬番（例: 1-2）</li>
+                  <li>3連複・3連単: 馬番-馬番-馬番（例: 1-2-3）</li>
+                  <li>複数の買い目: 1行に1目ずつ入力</li>
+                </ul>
+              </div>
               <textarea
                 rows={6}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 {...register('kaime_data')}
-                placeholder={'1-2-3\n4-5-6'}
+                placeholder={'1-2-3\n4-5-6\n7-8-9'}
               />
             </Field>
 

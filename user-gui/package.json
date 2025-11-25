@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && npm run electron:serve\"",
+    "dev": "concurrently \"vite --port 5173 --strictPort\" \"wait-on http://localhost:5173 && npm run electron:serve\"",
     "electron:serve": "tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs && cross-env NODE_ENV=development electron dist-electron/main.js",
     "build": "tsc -b && vite build && tsc -p tsconfig.electron.json && node scripts/postbuild-electron.mjs",
     "lint": "eslint .",
@@ -15,7 +15,8 @@
     "electron:build": "npm run build && electron-builder",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:linux": "npm run build && electron-builder --linux"
+    "electron:build:linux": "npm run build && electron-builder --linux",
+    "postinstall": "cross-env PLAYWRIGHT_BROWSERS_PATH=./node_modules/.cache/ms-playwright npx playwright install chromium"
   },
   "dependencies": {
     "@horsebet/shared": "file:../shared",
@@ -57,6 +58,13 @@
     "directories": {
       "buildResources": "build"
     },
+    "extraResources": [
+      {
+        "from": "node_modules/.cache/ms-playwright",
+        "to": "ms-playwright",
+        "filter": ["**/*"]
+      }
+    ],
     "publish": {
       "provider": "github",
       "owner": "jinjinsansan",

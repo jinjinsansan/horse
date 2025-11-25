@@ -1,10 +1,28 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import fs from 'node:fs';
 import path from 'node:path';
 import { executeBet } from './services/bet-executor';
 import { fetchJraOdds } from './services/odds-fetcher';
 
 const isDev = process.env.NODE_ENV === 'development';
+const getPlaywrightCachePath = () => {
+  if (isDev) {
+    return path.join(__dirname, '../node_modules/.cache/ms-playwright');
+  }
+  return path.join(process.resourcesPath, 'ms-playwright');
+};
+
+const playwrightCachePath = getPlaywrightCachePath();
+process.env.PLAYWRIGHT_BROWSERS_PATH = playwrightCachePath;
+
+const isPlaywrightReady = () => {
+  try {
+    return fs.existsSync(playwrightCachePath);
+  } catch {
+    return false;
+  }
+};
 let mainWindow: BrowserWindow | null = null;
 
 autoUpdater.autoDownload = false;
@@ -69,6 +87,10 @@ ipcMain.handle('horsebet:fetch-odds', async (_event, payload: { joName: string; 
 
 ipcMain.handle('horsebet:get-version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('horsebet:is-playwright-ready', () => {
+  return isPlaywrightReady();
 });
 
 ipcMain.handle('horsebet:check-updates', async () => {

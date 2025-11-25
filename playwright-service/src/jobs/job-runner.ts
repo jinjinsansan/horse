@@ -212,10 +212,20 @@ function mapIpatCredentials(raw?: Record<string, string> | null): IpatCredential
   } satisfies IpatCredentials;
 }
 
-function mapSpatCredentials(raw?: Record<string, string> | null): Spat4Credentials | null {
+function normalizeCredential(value: unknown) {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function mapSpatCredentials(raw?: Record<string, unknown> | null): Spat4Credentials | null {
   if (!raw) return null;
+  const memberNumber = normalizeCredential(raw.member_number ?? raw.memberNumber ?? raw.user_id ?? '');
+  const memberId = normalizeCredential(raw.member_id ?? raw.memberId ?? raw.password ?? '');
+  if (!memberNumber || !memberId) return null;
   return {
-    userId: raw.user_id ?? raw.userId ?? '',
-    password: raw.password ?? '',
+    memberNumber,
+    memberId,
   } satisfies Spat4Credentials;
 }
