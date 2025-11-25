@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HorseBet Admin",
-  description: "競馬買い目配信システム 管理者パネル",
+  title: "HorseBet AI Admin",
+  description: "HorseBet AI 管理者パネル - 革命的競馬自動投票システム",
 };
 
 export default function RootLayout({
