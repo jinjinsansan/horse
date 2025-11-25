@@ -76,14 +76,37 @@ export async function executeBet(payload: BetExecutionPayload) {
         return { success: false, message: 'IPAT認証情報が設定されていません' };
       }
       console.log('[bet-executor] Executing IPAT vote...');
+      
+      // 馬券種類名から馬券種類コードを取得
+      const betTypeMap: Record<string, number> = {
+        '単勝': 1,
+        '複勝': 2,
+        '枠連': 3,
+        '馬連': 4,
+        'ワイド': 5,
+        '馬単': 6,
+        '3連複': 7,
+        '３連複': 7,
+        '3連単': 8,
+        '３連単': 8,
+      };
+      const betTypeNo = betTypeMap[signal.bet_type_name] || 8;
+      
+      // kaisaiDateをDateオブジェクトに変換
+      const kaisaiDate = new Date(signal.signal_date);
+      
       const request: IpatBetRequest = {
+        kaisaiDate,
         joName: signal.jo_name,
         raceNo: signal.race_no,
-        betTypeName: signal.bet_type_name,
+        betType: signal.bet_type_name,
+        betTypeNo,
+        method: 301, // デフォルトはフォーメーション
         kaime: signal.kaime_data,
         amount: signal.suggested_amount,
       };
-      const result = await executeIpatVote(payload.credentials.ipat, request, { headless });
+      
+      const result = await executeIpatVote(payload.credentials.ipat, [request], { headless });
       console.log('[bet-executor] IPAT result:', result);
       return normalizeResult(result);
     }
