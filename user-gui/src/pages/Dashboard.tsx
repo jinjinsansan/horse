@@ -50,6 +50,14 @@ export default function Dashboard() {
     }
     if (data) {
       setAutoBetEnabled(data.auto_bet_enabled ?? false);
+      console.log('[Dashboard] Loaded credentials:', {
+        hasIpatInetId: !!data.ipat_credentials?.inet_id,
+        hasIpatUserCode: !!data.ipat_credentials?.user_cd,
+        hasIpatPassword: !!data.ipat_credentials?.password,
+        hasIpatPin: !!data.ipat_credentials?.pin,
+        hasSpatUserId: !!data.spat4_credentials?.user_id,
+        hasSpatPassword: !!data.spat4_credentials?.password,
+      });
       setCredentials({
         ipat: data.ipat_credentials?.inet_id
           ? {
@@ -159,30 +167,51 @@ export default function Dashboard() {
       suggested_amount: target.suggested_amount,
     };
 
-    const result = await window.horsebet.executeBet({
-      signal: signalPayload,
-      credentials,
-      headless: isAuto,
+    console.log('[Dashboard] Executing bet with credentials:', {
+      hasIpat: !!credentials.ipat,
+      hasSpat4: !!credentials.spat4,
+      raceType: target.race_type,
     });
 
-    if (result?.success) {
+    try {
+      const result = await window.horsebet.executeBet({
+        signal: signalPayload,
+        credentials,
+        headless: isAuto,
+      });
+
+      console.log('[Dashboard] Bet execution result:', result);
+
+      if (result?.success) {
+        if (!isAuto) {
+          setBetStatus('投票が完了しました');
+        }
+        if (userId) {
+          await logBetHistory({
+            signal: target,
+            userId,
+            isAuto,
+            result: 'pending',
+          });
+        }
+        if (oiageRecord?.is_active) {
+          await advanceOiage(oiageRecord, target.suggested_amount);
+          await refreshOiageState();
+        }
+      } else {
+        const errorMsg = result?.details 
+          ? `${result.message}: ${result.details}` 
+          : result?.message ?? '投票に失敗しました';
+        if (!isAuto) {
+          setBetStatus(errorMsg);
+        }
+        console.error('[Dashboard] Bet failed:', errorMsg);
+      }
+    } catch (error) {
+      console.error('[Dashboard] Bet execution error:', error);
       if (!isAuto) {
-        setBetStatus('投票が完了しました');
+        setBetStatus(`エラー: ${error instanceof Error ? error.message : String(error)}`);
       }
-      if (userId) {
-        await logBetHistory({
-          signal: target,
-          userId,
-          isAuto,
-          result: 'pending',
-        });
-      }
-      if (oiageRecord?.is_active) {
-        await advanceOiage(oiageRecord, target.suggested_amount);
-        await refreshOiageState();
-      }
-    } else if (!isAuto) {
-      setBetStatus(result?.message ?? '投票に失敗しました');
     }
   }, [credentials, oiageRecord, refreshOiageState, userId]);
 
