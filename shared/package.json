@@ -13,13 +13,34 @@
     "dist"
   ],
   "exports": {
-    "./types/*": "./dist/types/*",
-    "./lib/*": "./dist/lib/*",
+    "./types/database.types": {
+      "types": "./dist/types/database.types.d.ts",
+      "default": "./dist/types/database.types.js"
+    },
+    "./types/business.types": {
+      "types": "./dist/types/business.types.d.ts",
+      "default": "./dist/types/business.types.js"
+    },
+    "./lib/supabase": {
+      "types": "./dist/lib/supabase.d.ts",
+      "default": "./dist/lib/supabase.js"
+    },
     "./automation": {
       "types": "./dist/automation/index.d.ts",
       "default": "./dist/automation/index.js"
     },
-    "./automation/*": "./dist/automation/*"
+    "./automation/ipat-voter": {
+      "types": "./dist/automation/ipat-voter.d.ts",
+      "default": "./dist/automation/ipat-voter.js"
+    },
+    "./automation/spat4-voter": {
+      "types": "./dist/automation/spat4-voter.d.ts",
+      "default": "./dist/automation/spat4-voter.js"
+    },
+    "./automation/odds-scraper": {
+      "types": "./dist/automation/odds-scraper.d.ts",
+      "default": "./dist/automation/odds-scraper.js"
+    }
   },
   "typesVersions": {
     "*": {

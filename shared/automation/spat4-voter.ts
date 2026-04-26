@@ -72,6 +72,8 @@ function getShikiCode(betType: string): string {
 
 type Spat4VoterOptions = {
   profileDir?: string;
+  /** スクリーンショット保存先ディレクトリ（指定時のみ vote 失敗時に保存） */
+  screenshotDir?: string;
 };
 
 export class Spat4Voter {
@@ -207,12 +209,32 @@ export class Spat4Voter {
     } catch (error) {
       const detailMessage = error instanceof Error ? error.message : `${error}`;
       this.log('Vote error:', detailMessage);
+      const screenshotPath = await this.captureScreenshot('spat4-error');
+      const detail = screenshotPath ? `${detailMessage} (screenshot: ${screenshotPath})` : detailMessage;
       return {
         success: false,
         message: 'SPAT4投票処理でエラーが発生しました',
-        detail: detailMessage,
-        details: detailMessage,
+        detail,
+        details: detail,
       };
+    }
+  }
+
+  /**
+   * スクリーンショット保存（option.screenshotDir が指定されている場合のみ）
+   */
+  private async captureScreenshot(prefix: string): Promise<string | null> {
+    if (!this.options.screenshotDir || !this.page) return null;
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `${prefix}-${ts}.png`;
+    const fullPath = `${this.options.screenshotDir.replace(/[\\/]+$/, '')}/${filename}`;
+    try {
+      await this.page.screenshot({ path: fullPath, fullPage: true });
+      this.log(`Screenshot saved: ${fullPath}`);
+      return fullPath;
+    } catch (e) {
+      this.log('Screenshot save failed:', e);
+      return null;
     }
   }
 

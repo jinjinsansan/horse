@@ -54,6 +54,18 @@ const getSpat4ProfileDir = (() => {
   };
 })();
 
+const getScreenshotDir = (() => {
+  let cached: string | null = null;
+  return () => {
+    if (!cached) {
+      const dir = path.join(app.getPath('userData'), 'screenshots');
+      ensureDir(dir);
+      cached = dir;
+    }
+    return cached;
+  };
+})();
+
 function normalizeResult<T extends VoteOutcome>(result: T): T {
   if (result && result.detail && !result.details) {
     return { ...result, details: result.detail };
@@ -95,18 +107,24 @@ export async function executeBet(payload: BetExecutionPayload) {
       // kaisaiDateをDateオブジェクトに変換
       const kaisaiDate = new Date(signal.signal_date);
       
+      // 単勝(1)・複勝(2)は方式不要。それ以外はフォーメーション(301)をデフォルト
+      const method = betTypeNo === 1 || betTypeNo === 2 ? 0 : 301;
+
       const request: IpatBetRequest = {
         kaisaiDate,
         joName: signal.jo_name,
         raceNo: signal.race_no,
         betType: signal.bet_type_name,
         betTypeNo,
-        method: 301, // デフォルトはフォーメーション
+        method,
         kaime: signal.kaime_data,
         amount: signal.suggested_amount,
       };
       
-      const result = await executeIpatVote(payload.credentials.ipat, [request], { headless });
+      const result = await executeIpatVote(payload.credentials.ipat, [request], {
+        headless,
+        screenshotDir: getScreenshotDir(),
+      });
       console.log('[bet-executor] IPAT result:', result);
       return normalizeResult(result);
     }
@@ -116,7 +134,13 @@ export async function executeBet(payload: BetExecutionPayload) {
     }
 
     const profileDir = getSpat4ProfileDir();
-    console.log('[bet-executor] Executing SPAT4 vote...', { profileDir, credentials: payload.credentials.spat4 });
+    // 認証情報は絶対にログ出力しない。存在チェックのみ表示
+    console.log('[bet-executor] Executing SPAT4 vote...', {
+      profileDir,
+      hasMemberNumber: !!payload.credentials.spat4?.memberNumber,
+      hasMemberId: !!payload.credentials.spat4?.memberId,
+      hasPassword: !!payload.credentials.spat4?.password,
+    });
 
     const memberNumber = payload.credentials.spat4.memberNumber?.toString().trim();
     const memberId = payload.credentials.spat4.memberId?.toString().trim();
@@ -130,7 +154,7 @@ export async function executeBet(payload: BetExecutionPayload) {
       return { success: false, message: 'SPAT4暗証番号が未入力です' };
     }
 
-    const voter = new Spat4Voter({ profileDir });
+    const voter = new Spat4Voter({ profileDir, screenshotDir: getScreenshotDir() });
     try {
       await voter.initialize(headless);
       await voter.login({ memberNumber, memberId, password });

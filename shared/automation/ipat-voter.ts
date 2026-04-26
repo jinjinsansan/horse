@@ -79,6 +79,8 @@ export interface IpatVoteResult {
 interface IpatVoterOptions {
   headless?: boolean;
   profileDir?: string;
+  /** スクリーンショット保存先ディレクトリ（指定時のみ vote 失敗時に保存） */
+  screenshotDir?: string;
 }
 
 export class IpatVoter {
@@ -110,6 +112,7 @@ export class IpatVoter {
     this.options = {
       headless: options.headless ?? false,
       profileDir: options.profileDir,
+      screenshotDir: options.screenshotDir,
     };
   }
 
@@ -179,12 +182,102 @@ export class IpatVoter {
       };
     } catch (error) {
       this.log('Vote error:', error);
+      const screenshotPath = await this.captureScreenshot('ipat-error');
       return {
         success: false,
         message: 'IPAT投票処理でエラーが発生しました',
-        detail: String(error),
-        details: String(error),
+        detail: screenshotPath ? `${String(error)} (screenshot: ${screenshotPath})` : String(error),
+        details: screenshotPath ? `${String(error)} (screenshot: ${screenshotPath})` : String(error),
       };
+    }
+  }
+
+  /**
+   * 単勝/複勝の馬番ボタンを複数 selector で探索する。
+   * 主候補 → fallback の順に試し、最初に見つかったものを返す。
+   */
+  private async findUmabanButton(betTypeNo: number, umaban: number) {
+    const page = this.ensurePage();
+    const isTan = betTypeNo === 1;
+    const candidates: string[] = isTan
+      ? [
+          `#select-list-tan-${umaban}`,
+          `button[id*="select-list-tan-${umaban}"]`,
+          `button[onclick*="vm.selectUma(${umaban}"]`,
+          `button[onclick*="selectUma(${umaban},"]`,
+        ]
+      : [
+          `#select-list-fuku-${umaban}`,
+          `button[id*="select-list-fuku-${umaban}"]`,
+          `button[onclick*="vm.selectUma(${umaban}"]`,
+          `button[onclick*="selectUma(${umaban},"]`,
+        ];
+
+    for (const sel of candidates) {
+      const loc = page.locator(sel).first();
+      try {
+        if (await loc.count()) {
+          this.log(`Found umaban button via selector: ${sel}`);
+          return loc;
+        }
+      } catch {
+        // selector 構文エラー等は無視して次へ
+      }
+    }
+    return null;
+  }
+
+  /**
+   * デバッグ用: 馬番ボタン周辺の DOM スニペットを取得（先頭 500 字）
+   *
+   * page.evaluate の中身はブラウザ context で実行されるため document を直接参照できる。
+   * shared パッケージは Node lib のみで型推論されるので、コールバック側は any で受ける。
+   */
+  private async dumpRelevantDom(umaban: number): Promise<string> {
+    const page = this.ensurePage();
+    try {
+      // page.evaluate のコールバックはブラウザ context で実行される。
+      // shared パッケージは Node lib のみのため、any キャストで型エラーを回避。
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const html = await page.evaluate<string, number>(
+        ((target: number) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const doc = (globalThis as any).document;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const buttons: any[] = Array.from(doc.querySelectorAll('button'));
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const matches = buttons.filter((b: any) =>
+            String(b.id || '').includes(String(target)) ||
+            String(b.getAttribute('onclick') || '').includes(`(${target}`)
+          );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return matches.slice(0, 5).map((b: any) => b.outerHTML).join(' | ');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        }) as any,
+        umaban,
+      );
+      return (html || '(no related buttons found)').slice(0, 500);
+    } catch (e) {
+      return `dom dump failed: ${e}`;
+    }
+  }
+
+  /**
+   * スクリーンショット保存（option.screenshotDir が指定されている場合のみ）
+   */
+  private async captureScreenshot(prefix: string): Promise<string | null> {
+    if (!this.options.screenshotDir || !this.page) return null;
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `${prefix}-${ts}.png`;
+    // ブラウザ側に Node の path.join はないので / で結合
+    const fullPath = `${this.options.screenshotDir.replace(/[\\/]+$/, '')}/${filename}`;
+    try {
+      await this.page.screenshot({ path: fullPath, fullPage: true });
+      this.log(`Screenshot saved: ${fullPath}`);
+      return fullPath;
+    } catch (e) {
+      this.log('Screenshot save failed:', e);
+      return null;
     }
   }
 
@@ -391,6 +484,12 @@ export class IpatVoter {
       this.log('Canceled umabans:', this.canceledUmabans);
     }
 
+    // 単勝・複勝は専用パス（GANTZ メイン経路）
+    if (betInfo.betTypeNo === 1 || betInfo.betTypeNo === 2) {
+      await this.inputKaimeTanFuku(betInfo);
+      return;
+    }
+
     // 取消馬を含む買い目をスキップ
     let shouldSkip = false;
     for (const kaime of betInfo.kaime) {
@@ -416,6 +515,59 @@ export class IpatVoter {
 
     // 馬番選択
     await this.selectUmabans(betInfo);
+
+    // 「セット」ボタンをクリック
+    await page.waitForTimeout(500);
+    const setButton = page.locator('button[onclick*="vm.onSet("]:has-text("セット")');
+    if (!(await setButton.isDisabled())) {
+      this.log('Clicking セット button');
+      await setButton.click();
+      this.currentKaimeNo++;
+      await page.waitForTimeout(1000);
+    }
+  }
+
+  /**
+   * 単勝・複勝の買い目入力（1頭のみクリック）
+   * kaime[0] に馬番文字列（例 "5"）が入っている前提
+   */
+  private async inputKaimeTanFuku(betInfo: IpatBetRequest): Promise<void> {
+    const page = this.ensurePage();
+
+    const targetUmaban = parseInt(String(betInfo.kaime[0] ?? ''), 10);
+    if (!targetUmaban || targetUmaban <= 0) {
+      throw new Error(`単勝/複勝の馬番が無効です: ${JSON.stringify(betInfo.kaime)}`);
+    }
+
+    // 取消馬チェック
+    if (this.canceledUmabans.includes(targetUmaban)) {
+      this.log(`Skipping: umaban ${targetUmaban} is canceled`);
+      return;
+    }
+
+    this.log(`Tan/Fuku input: betTypeNo=${betInfo.betTypeNo}, umaban=${targetUmaban}, amount=${betInfo.amount}`);
+
+    // 金額入力
+    const amountInput = page.locator('#select-list-amount-unit').locator('xpath=..').locator('input').first();
+    await amountInput.fill(String(Math.floor(betInfo.amount / 100)));
+    await amountInput.dispatchEvent('change');
+
+    // 馬番ボタンをクリック (単勝: select-list-tan-N / 複勝: select-list-fuku-N)
+    // 実 IPAT HTML が変更された場合に備え、複数 selector でフォールバック探索する
+    const button = await this.findUmabanButton(betInfo.betTypeNo, targetUmaban);
+    if (!button) {
+      // デバッグ補助: HTML をスクショ＋スニペットで残す
+      await this.captureScreenshot('ipat-tanfuku-no-button');
+      const snippet = await this.dumpRelevantDom(targetUmaban);
+      throw new Error(
+        `馬番ボタンが見つかりません (betTypeNo=${betInfo.betTypeNo}, umaban=${targetUmaban})\n` +
+        `DOM hint: ${snippet}`
+      );
+    }
+
+    this.log(`Clicking umaban button (umaban=${targetUmaban})`);
+    await button.click();
+    await page.waitForTimeout(100);
 
     // 「セット」ボタンをクリック
     await page.waitForTimeout(500);
@@ -478,7 +630,7 @@ export class IpatVoter {
 
     // 選択する馬番リストを作成
     const umabanList: number[] = [];
-    for (let i = 1; i < betInfo.kaime.length; i++) {
+    for (let i = 0; i < betInfo.kaime.length; i++) {
       const kaimeStr = betInfo.kaime[i];
       if (!kaimeStr) continue;
 
@@ -630,10 +782,16 @@ export class IpatVoter {
   }
 
   /**
-   * ヘルパー関数：馬番ボタンのID接頭辞を取得
+   * ヘルパー関数：馬番ボタンの ID 接頭辞を取得（連系馬券用）
+   *
+   * 検証状況:
+   * - 単勝(1) / 複勝(2): inputKaimeTanFuku() 経由で findUmabanButton が
+   *   フォールバック selector を持つため、この prefix を直接使うパスは無効。
+   * - 連系(3-8): 実 IPAT HTML での selector 検証は **未実施**。
+   *   ライブテストで動作確認のうえ、必要に応じて prefix を実値に直すこと。
+   *   失敗時は selectUmabans からのスクリーンショット出力で原因特定可能。
    */
   private getIdNames(betTypeNo: number, _method: number): string[] {
-    // 簡易実装：実際のHTMLに合わせて調整が必要
     const names: string[] = [''];
 
     switch (betTypeNo) {

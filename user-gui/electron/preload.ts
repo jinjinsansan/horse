@@ -18,7 +18,8 @@ type BridgeCredentials = {
     pin: string;
   };
   spat4?: {
-    userId: string;
+    memberNumber: string;
+    memberId: string;
     password: string;
   };
 };

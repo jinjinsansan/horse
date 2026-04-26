@@ -5,7 +5,9 @@ import Link from 'next/link';
 import type { BetSignal } from '@horsebet/shared/types/database.types';
 import { supabase } from '@/lib/supabase/client';
 
-const SERVER_BET_AVAILABLE = process.env.NEXT_PUBLIC_ENABLE_SERVER_BET === 'true';
+// サーバー自動投票は廃止済み（playwright-service 撤去）。
+// 投票は user-gui (Electron) 経由のみ。env 変数があっても誤起動しないよう常時 false 固定。
+const SERVER_BET_AVAILABLE = false;
 
 type BetJob = {
   id: string;
@@ -60,37 +62,10 @@ export default function ClientPage() {
     await fetchJobsFor(userId);
   }, [userId, fetchJobsFor]);
 
-  const handleServerBet = useCallback(async (signal: BetSignal) => {
-    if (!SERVER_BET_AVAILABLE) {
-      setInfoMessage('現在サーバー自動投票は提供を停止しています。Electron版アプリをご利用ください。');
-      return;
-    }
-
-    setInfoMessage('');
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) {
-      setInfoMessage('再度ログインしてください');
-      return;
-    }
-
-    setJobStatus((prev) => ({ ...prev, [signal.id]: '送信中...' }));
-    const response = await fetch('/api/server-bet', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${data.session.access_token}`,
-      },
-      body: JSON.stringify({ signalId: signal.id, auto: true }),
-    });
-
-    const result = await response.json().catch(() => ({}));
-    if (response.ok) {
-      setJobStatus((prev) => ({ ...prev, [signal.id]: `ジョブ登録: ${result.jobId ?? '成功'}` }));
-      await refreshJobs();
-    } else {
-      setJobStatus((prev) => ({ ...prev, [signal.id]: `失敗: ${result.error ?? 'unknown error'}` }));
-    }
-  }, [refreshJobs]);
+  const handleServerBet = useCallback(async (_signal: BetSignal) => {
+    // サーバー自動投票は廃止。Electron 版で投票してください。
+    setInfoMessage('現在サーバー自動投票は提供を停止しています。Electron版アプリをご利用ください。');
+  }, []);
 
   useEffect(() => {
     const initialize = async () => {

@@ -227,22 +227,98 @@ export default function Settings() {
         <section>
           <div className="section-head">
             <h2>自動投票</h2>
-            <label className="toggle">
+          </div>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={autoBetEnabled}
+              onChange={(event) => setAutoBetEnabled(event.target.checked)}
+            />
+            <span>配信された買い目を自動で投票する（GANTZ 自動購入を有効にする場合は ON）</span>
+          </label>
+          <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+            ※ 自動投票は本アプリが起動中のみ動作します。GANTZ 配信は 09:00 JST 以降にレース発走 5 分前まで予約され、PC を起動しておく必要があります。
+          </p>
+        </section>
+
+        <section>
+          <h2>IPAT 認証情報（JRA 自動投票用）</h2>
+          <div className="grid">
+            <label>
+              加入者番号（Internet ID）
               <input
-                type="checkbox"
-                checked={autoBetEnabled}
-                onChange={(event) => setAutoBetEnabled(event.target.checked)}
+                value={cred.ipatId}
+                onChange={(event) => setCred((prev) => ({ ...prev, ipatId: event.target.value }))}
+                placeholder="P12345678"
               />
-              <span>配信された買い目を自動で投票する</span>
             </label>
             <label>
-              暗証番号（ユーザーコード）
+              ユーザーコード
+              <input
+                value={cred.ipatUserCode}
+                onChange={(event) => setCred((prev) => ({ ...prev, ipatUserCode: event.target.value }))}
+                placeholder="4桁"
+              />
+            </label>
+            <label>
+              パスワード
+              <input
+                type="password"
+                value={cred.ipatPassword}
+                onChange={(event) => setCred((prev) => ({ ...prev, ipatPassword: event.target.value }))}
+              />
+            </label>
+            <label>
+              暗証番号（PIN）
+              <input
+                type="password"
+                value={cred.ipatPin}
+                onChange={(event) => setCred((prev) => ({ ...prev, ipatPin: event.target.value }))}
+                placeholder="4桁"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <h2>SPAT4 認証情報（NAR 自動投票用）</h2>
+          <p className="muted" style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+            GANTZ の配信対象は地方競馬（NAR）が中心のため、SPAT4 認証情報の登録を推奨します。
+          </p>
+          <div className="grid">
+            <label>
+              加入者番号
+              <input
+                value={cred.spatMemberNumber}
+                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberNumber: event.target.value }))}
+                placeholder="10桁"
+              />
+            </label>
+            <label>
+              利用者ID
+              <input
+                type="password"
+                value={cred.spatMemberId}
+                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberId: event.target.value }))}
+              />
+            </label>
+            <label>
+              暗証番号
+              <input
+                type="password"
+                value={cred.spatPassword}
+                onChange={(event) => setCred((prev) => ({ ...prev, spatPassword: event.target.value }))}
+                placeholder="4桁"
+              />
+            </label>
+          </div>
+        </section>
 
         <section>
           <div className="section-head" style={{ justifyContent: 'space-between' }}>
             <div>
               <h2>追い上げ設定（3連単）</h2>
-              <p className="muted">ベース金額と目標利益を指定してください</p>
+              <p className="muted">ベース金額と目標利益を指定してください（GANTZ 単勝運用では使用しません）</p>
             </div>
             <label className="toggle">
               <input
@@ -282,76 +358,6 @@ export default function Settings() {
                 max={10}
                 value={cred.oiageMaxSteps}
                 onChange={(event) => setCred((prev) => ({ ...prev, oiageMaxSteps: Number(event.target.value) }))}
-              />
-            </label>
-          </div>
-        </section>
-              <input
-                value={cred.ipatUserCode}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatUserCode: event.target.value }))}
-                placeholder="4桁"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section>
-          <h2>IPAT 認証情報</h2>
-          <div className="grid">
-            <label>
-              加入者番号
-            <label>
-              暗証番号（PIN）
-              <input
-                type="password"
-                value={cred.ipatPin}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatPin: event.target.value }))}
-                placeholder="4桁"
-              />
-            </label>
-              <input
-                value={cred.ipatId}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatId: event.target.value }))}
-                placeholder="P12345678"
-              />
-            </label>
-            <label>
-              パスワード
-              <input
-                type="password"
-                value={cred.ipatPassword}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatPassword: event.target.value }))}
-              />
-            </label>
-          </div>
-        </section>
-
-        <section>
-          <h2>SPAT4 認証情報</h2>
-          <div className="grid">
-            <label>
-              加入者番号
-              <input
-                value={cred.spatMemberNumber}
-                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberNumber: event.target.value }))}
-                placeholder="10桁"
-              />
-            </label>
-            <label>
-              利用者ID（パスワード）
-              <input
-                type="password"
-                value={cred.spatMemberId}
-                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberId: event.target.value }))}
-              />
-            </label>
-            <label>
-              暗証番号
-              <input
-                type="password"
-                value={cred.spatPassword}
-                onChange={(event) => setCred((prev) => ({ ...prev, spatPassword: event.target.value }))}
-                placeholder="4桁"
               />
             </label>
           </div>

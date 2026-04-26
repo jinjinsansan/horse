@@ -8,6 +8,7 @@ interface RendererIpatCredentials {
 interface RendererSpatCredentials {
   memberNumber: string;
   memberId: string;
+  password: string;
 }
 
 interface RendererMinimalSignal {

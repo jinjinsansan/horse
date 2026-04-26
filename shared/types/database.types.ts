@@ -2,6 +2,7 @@ export type RaceType = 'JRA' | 'NAR';
 export type BetResult = 'pending' | 'win' | 'lose' | 'cancelled';
 export type SignalStatus = 'active' | 'cancelled' | 'completed';
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'suspended';
+export type SignalSource = 'manual' | 'gantz_strict' | 'gantz_loose' | 'other';
 
 export interface BetSignal {
   id: number;
@@ -17,9 +18,11 @@ export interface BetSignal {
   kaime_data: string[];
   note: string | null;
   status: SignalStatus;
+  start_time: string | null;
+  source: SignalSource;
   created_at: string;
   updated_at: string;
-  created_by: string;
+  created_by: string | null;
 }
 
 export interface UserProfile {

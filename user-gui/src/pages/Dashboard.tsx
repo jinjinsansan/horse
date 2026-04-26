@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BetSignal } from '@horsebet/shared/types/database.types';
 import { supabase } from '@/lib/supabase';
 import { fetchTodaySignals, subscribeToSignalFeed } from '@/lib/api/signals';
-import { logBetHistory } from '@/lib/api/history';
+import { logBetHistory, fetchSubmittedSignalIds } from '@/lib/api/history';
 import { fetchActiveOiage, advanceOiage, resetOiage, type OiageRecord } from '@/lib/api/oiage';
 import { createOiageCalculator } from '@/services/oiage-calculator';
+import { BetScheduler, type ScheduledItem } from '@/services/bet-scheduler';
 import OddsPanel from '@/components/OddsPanel';
 import { UpdateNotification } from '@/components/UpdateNotification';
 import { Bell, Settings as SettingsIcon, LogOut } from 'lucide-react';
@@ -39,6 +40,32 @@ const mapSpatCredentials = (raw: RawSpatCredentials) => {
   return { memberNumber, memberId, password };
 };
 
+function describeSubscription(status: 'trial' | 'active' | 'expired' | 'suspended'): string {
+  switch (status) {
+    case 'trial':     return 'トライアル';
+    case 'active':    return '有効';
+    case 'expired':   return '期限切れ';
+    case 'suspended': return '停止中';
+  }
+}
+
+function describeScheduleStatus(item: ScheduledItem | undefined): { label: string; cls: string } | null {
+  if (!item) return null;
+  switch (item.status) {
+    case 'queued':    return { label: '実行待ち', cls: 'sched-queued' };
+    case 'scheduled': {
+      const fireAt = item.fireAt ? new Date(item.fireAt) : null;
+      const t = fireAt ? fireAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '';
+      return { label: `${t} 発射予定`, cls: 'sched-scheduled' };
+    }
+    case 'firing':    return { label: '投票中…',  cls: 'sched-firing' };
+    case 'submitted': return { label: '投票済',    cls: 'sched-submitted' };
+    case 'failed':    return { label: '失敗',      cls: 'sched-failed' };
+    case 'skipped':   return { label: '対象外',    cls: 'sched-skipped' };
+    default:          return null;
+  }
+}
+
 export default function Dashboard() {
   const [signals, setSignals] = useState<BetSignal[]>([]);
   const [selectedSignal, setSelectedSignal] = useState<BetSignal | null>(null);
@@ -49,10 +76,22 @@ export default function Dashboard() {
     spat4?: { memberNumber: string; memberId: string; password: string };
   }>({});
   const [autoBetEnabled, setAutoBetEnabled] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'trial' | 'active' | 'expired' | 'suspended'>('trial');
   const [oiageConfig, setOiageConfig] = useState({ baseAmount: 1000, maxSteps: 5, targetProfit: 10000 });
   const [oiageRecord, setOiageRecord] = useState<OiageRecord | null>(null);
   const [betStatus, setBetStatus] = useState('');
   const [loading, setLoading] = useState(true);
+  const [scheduleMap, setScheduleMap] = useState<Map<number, ScheduledItem>>(new Map());
+  const [schedulerReady, setSchedulerReady] = useState(false);
+  const submittedIdsRef = useRef<Set<number>>(new Set());
+  const schedulerRef = useRef<BetScheduler | null>(null);
+  // handleBetExecution の最新参照を保持する。
+  // スケジューラ初期化 Effect の依存配列に handleBetExecution を含めると
+  // oiageRecord 等が更新されるたびにスケジューラが再作成されてタイマーが消えるため、
+  // ref 経由で呼び出すことで Effect の依存を userId のみに限定する。
+  const handleBetExecutionRef = useRef<(target: BetSignal | null, isAuto?: boolean) => Promise<void>>(
+    async () => { /* placeholder: 初期化前は何もしない */ }
+  );
   const navigate = useNavigate();
 
   const loadProfile = useCallback(async () => {
@@ -61,7 +100,7 @@ export default function Dashboard() {
     setUserId(user.user.id);
     const { data } = await supabase
       .from('user_profiles')
-      .select('display_name, ipat_credentials, spat4_credentials, auto_bet_enabled, settings')
+      .select('display_name, ipat_credentials, spat4_credentials, auto_bet_enabled, subscription_status, settings')
       .eq('id', user.user.id)
       .single();
     if (data?.display_name) {
@@ -69,6 +108,7 @@ export default function Dashboard() {
     }
     if (data) {
       setAutoBetEnabled(data.auto_bet_enabled ?? false);
+      setSubscriptionStatus((data.subscription_status as typeof subscriptionStatus | null) ?? 'trial');
       const mappedSpat = mapSpatCredentials(data.spat4_credentials ?? undefined);
       console.log('[Dashboard] Loaded credentials:', {
         hasIpatInetId: !!data.ipat_credentials?.inet_id,
@@ -121,6 +161,20 @@ export default function Dashboard() {
   }, [loadProfile]);
 
   const todaysCount = useMemo(() => signals.length, [signals]);
+
+  // 投票漏れ検出: 発走時刻を過ぎていて、当日の bet_history に対応行がない signals
+  const missedSignals = useMemo(() => {
+    const now = Date.now();
+    return signals.filter((s) => {
+      if (!s.start_time || !/^\d{1,2}:\d{2}$/.test(s.start_time)) return false;
+      if (submittedIdsRef.current.has(s.id)) return false;
+      const sched = scheduleMap.get(s.id);
+      if (sched?.status === 'submitted' || sched?.status === 'firing') return false;
+      const [hh, mm] = s.start_time.split(':').map((v) => parseInt(v, 10));
+      const startMs = new Date(`${s.signal_date}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00+09:00`).getTime();
+      return Number.isFinite(startMs) && now > startMs + 60_000;
+    });
+  }, [signals, scheduleMap]);
   const oiageCalculator = useMemo(() => createOiageCalculator({
     baseAmount: oiageConfig.baseAmount,
     targetProfit: oiageConfig.targetProfit,
@@ -153,6 +207,17 @@ export default function Dashboard() {
       if (!isAuto) {
         setBetStatus('Electron版のみ投票ボタンが利用できます');
       }
+      return;
+    }
+
+    // サブスクリプション gate
+    if (subscriptionStatus === 'expired' || subscriptionStatus === 'suspended') {
+      const msg = subscriptionStatus === 'expired'
+        ? 'サブスクリプションの有効期限が切れています'
+        : 'アカウントが一時停止されています';
+      if (!isAuto) setBetStatus(msg);
+      console.warn('[Dashboard] subscription gate blocked:', subscriptionStatus);
+      if (isAuto) throw new Error(msg);
       return;
     }
 
@@ -211,6 +276,8 @@ export default function Dashboard() {
             result: 'pending',
           });
         }
+        // 二重投票防止のためスケジューラの "投票済" 集合に登録
+        submittedIdsRef.current.add(target.id);
         if (oiageRecord?.is_active) {
           await advanceOiage(oiageRecord, target.suggested_amount);
           await refreshOiageState();
@@ -225,33 +292,105 @@ export default function Dashboard() {
           setBetStatus(errorMsg);
         }
         console.error('[Dashboard] Bet failed:', errorMsg);
+        if (isAuto) {
+          // スケジューラに失敗を伝えるため throw（onChange で 'failed' に更新される）
+          throw new Error(errorMsg);
+        }
       }
     } catch (error) {
       console.error('[Dashboard] Bet execution error:', error);
       if (!isAuto) {
         setBetStatus(`エラー: ${error instanceof Error ? error.message : String(error)}`);
+      } else {
+        throw error;
       }
     }
-  }, [credentials, oiageRecord, refreshOiageState, userId]);
+  }, [credentials, oiageRecord, refreshOiageState, userId, subscriptionStatus]);
 
+  // ref を常に最新の handleBetExecution で上書きする（スケジューラの executor 経由で呼ばれる）
+  useEffect(() => {
+    handleBetExecutionRef.current = handleBetExecution;
+  });
+
+  // Realtime: 新しいシグナルを受信して state とスケジューラに反映
   useEffect(() => {
     const unsubscribe = subscribeToSignalFeed((signal) => {
-      setSignals((prev) => [signal, ...prev]);
-      setSelectedSignal(signal);
+      setSignals((prev) => {
+        if (prev.some((s) => s.id === signal.id)) return prev;
+        return [signal, ...prev];
+      });
+      setSelectedSignal((prev) => prev ?? signal);
       if (Notification.permission === 'granted') {
         new Notification('新しい買い目が届きました', {
-          body: `${signal.jo_name} ${signal.race_no}R ${signal.bet_type_name}`,
+          body: `${signal.jo_name} ${signal.race_no}R ${signal.bet_type_name}${signal.start_time ? ` 発走${signal.start_time}` : ''}`,
         });
       }
-      if (autoBetEnabled) {
-        handleBetExecution(signal, true);
+      if (autoBetEnabled && schedulerRef.current && schedulerReady) {
+        schedulerRef.current.schedule(signal);
+      }
+      // schedulerReady=false 中に来た signal は signals state に入るので、
+      // schedulerReady=true 後の autoBetEnabled effect で拾われる
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [autoBetEnabled, schedulerReady]);
+
+  // スケジューラ初期化（userId 確定後に1度だけ）
+  // 重要: fetchSubmittedSignalIds が完了するまで schedulerReady=false にしておき、
+  // 他の effect は schedulerReady を待ってからスケジュール開始する
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    const scheduler = new BetScheduler({
+      // ref 経由で呼ぶことで、oiageRecord 等の変化による handleBetExecution
+      // 再作成がスケジューラ再初期化（タイマー全消し）を引き起こさないようにする
+      executor: async (signal) => {
+        await handleBetExecutionRef.current(signal, true);
+      },
+      isAlreadySubmitted: (id) => submittedIdsRef.current.has(id),
+      onChange: (items) => setScheduleMap(new Map(items)),
+    });
+    schedulerRef.current = scheduler;
+    setSchedulerReady(false);
+
+    fetchSubmittedSignalIds(userId).then((ids) => {
+      if (cancelled) return;
+      submittedIdsRef.current = ids;
+      setSchedulerReady(true);
+    }).catch((err) => {
+      console.error('[Dashboard] fetchSubmittedSignalIds failed:', err);
+      if (!cancelled) {
+        // 安全側: エラー時もスケジューラは起動するが、二重投票チェックが効かない可能性あり
+        // → ユーザーに警告として bet_history 取得失敗を表示する余地あり (将来)
+        setSchedulerReady(true);
       }
     });
 
     return () => {
-      unsubscribe();
+      cancelled = true;
+      scheduler.dispose();
+      schedulerRef.current = null;
+      setSchedulerReady(false);
     };
-  }, [autoBetEnabled, handleBetExecution]);
+  }, [userId]); // handleBetExecution は ref 経由なので依存不要
+
+  // autoBetEnabled の ON/OFF と、起動時の signals ロード後のキュー再構築
+  // schedulerReady=true になるまで待つことで、submittedIds の取得前に schedule
+  // されてしまう競合を防ぐ
+  useEffect(() => {
+    const scheduler = schedulerRef.current;
+    if (!scheduler || !schedulerReady) return;
+    if (autoBetEnabled) {
+      signals.forEach((s) => scheduler.schedule(s));
+    } else {
+      for (const item of scheduler.getItems().values()) {
+        if (item.status === 'scheduled' || item.status === 'queued') {
+          scheduler.cancel(item.signal.id, '自動投票が無効化された');
+        }
+      }
+    }
+  }, [autoBetEnabled, signals, schedulerReady]);
 
   const handleOiageReset = async () => {
     if (!oiageRecord) return;
@@ -275,21 +414,28 @@ export default function Dashboard() {
           {loading && <p className="muted">読込中...</p>}
           {!loading && todaysCount === 0 && <p className="muted">本日の配信はありません</p>}
           <div className="signal-list">
-            {signals.map((signal) => (
-              <button
-                key={signal.id}
-                className={`signal-item ${selectedSignal?.id === signal.id ? 'active' : ''}`}
-                onClick={() => setSelectedSignal(signal)}
-              >
-                <span className="signal-time">
-                  {new Date(signal.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <div>
-                  <p className="signal-title">{signal.jo_name} {signal.race_no}R</p>
-                  <p className="signal-subtitle">{signal.bet_type_name} / {signal.kaime_data.length}点</p>
-                </div>
-              </button>
-            ))}
+            {signals.map((signal) => {
+              const item = scheduleMap.get(signal.id);
+              const statusBadge = describeScheduleStatus(item);
+              return (
+                <button
+                  key={signal.id}
+                  className={`signal-item ${selectedSignal?.id === signal.id ? 'active' : ''}`}
+                  onClick={() => setSelectedSignal(signal)}
+                >
+                  <span className="signal-time">
+                    {signal.start_time ?? new Date(signal.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <div>
+                    <p className="signal-title">{signal.jo_name} {signal.race_no}R</p>
+                    <p className="signal-subtitle">
+                      {signal.bet_type_name} / {signal.kaime_data.join(',')}
+                      {statusBadge && <span className={`schedule-badge ${statusBadge.cls}`}> · {statusBadge.label}</span>}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="sidebar-footer">
@@ -305,13 +451,40 @@ export default function Dashboard() {
       <main className="content">
         <header className="content-header">
           <div>
-            <p className="label">ようこそ、{profileName || '会員'} 様</p>
+            <p className="label">
+              ようこそ、{profileName || '会員'} 様
+              <span className={`subscription-badge sub-${subscriptionStatus}`}>{describeSubscription(subscriptionStatus)}</span>
+            </p>
             <h1>買い目ダッシュボード</h1>
-            <p className="muted">本日の買い目配信: {todaysCount} 件</p>
+            <p className="muted">
+              本日の買い目配信: {todaysCount} 件
+              {missedSignals.length > 0 && (
+                <span className="missed-warning"> ⚠️ 未投票で発走済: {missedSignals.length} 件</span>
+              )}
+            </p>
           </div>
-          <div className="pill">
-            <Bell size={20} />
-            <span>LIVE 配信中</span>
+          <div className="header-actions">
+            <label className="autobet-switch" title="GANTZ 配信を自動投票するかどうか">
+              <input
+                type="checkbox"
+                checked={autoBetEnabled}
+                onChange={async (event) => {
+                  const next = event.target.checked;
+                  setAutoBetEnabled(next);
+                  if (userId) {
+                    await supabase
+                      .from('user_profiles')
+                      .update({ auto_bet_enabled: next })
+                      .eq('id', userId);
+                  }
+                }}
+              />
+              <span>自動投票 {autoBetEnabled ? 'ON' : 'OFF'}</span>
+            </label>
+            <div className="pill">
+              <Bell size={20} />
+              <span>LIVE 配信中</span>
+            </div>
           </div>
         </header>
 
@@ -339,13 +512,52 @@ export default function Dashboard() {
                 </span>
               ))}
             </div>
+            {(() => {
+              const sched = scheduleMap.get(selectedSignal.id);
+              const isMissed = missedSignals.some((s) => s.id === selectedSignal.id);
+              if (!sched && !isMissed) return null;
+              return (
+                <div className="schedule-info">
+                  {isMissed && (
+                    <p className="missed-warning" style={{ fontWeight: 600 }}>
+                      ⚠️ このレースは既に発走時刻を過ぎていますが、未投票です。
+                      投票締切前であれば「手動で投票」から発射できます。
+                    </p>
+                  )}
+                  {sched && (
+                    <>
+                      <p className="muted">
+                        自動投票: <strong>{describeScheduleStatus(sched)?.label ?? '-'}</strong>
+                        {selectedSignal.start_time && ` / 発走 ${selectedSignal.start_time}`}
+                      </p>
+                      {sched.reason && <p className="muted">{sched.reason}</p>}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             <div className="actions">
               <button className="primary" onClick={() => handleBetExecution(selectedSignal)}>
                 手動で投票
               </button>
-              <button className="secondary" onClick={() => navigate('/settings')}>
-                自動投票設定を開く
-              </button>
+              {(() => {
+                const sched = scheduleMap.get(selectedSignal.id);
+                if (sched && (sched.status === 'scheduled' || sched.status === 'queued')) {
+                  return (
+                    <button
+                      className="secondary"
+                      onClick={() => schedulerRef.current?.cancel(selectedSignal.id, 'ユーザー取消')}
+                    >
+                      自動投票を取消
+                    </button>
+                  );
+                }
+                return (
+                  <button className="secondary" onClick={() => navigate('/settings')}>
+                    自動投票設定を開く
+                  </button>
+                );
+              })()}
             </div>
             {betStatus && <p className="info" style={{ marginTop: '0.75rem' }}>{betStatus}</p>}
             <OddsPanel signal={selectedSignal} />

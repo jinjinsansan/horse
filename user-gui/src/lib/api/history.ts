@@ -22,3 +22,19 @@ export async function logBetHistory(params: {
     is_auto_bet: isAuto,
   });
 }
+
+/**
+ * 当日 user_id が投票済みの signal_id 集合を返す（重複投票防止用）
+ */
+export async function fetchSubmittedSignalIds(userId: string): Promise<Set<number>> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const { data, error } = await supabase
+    .from('bet_history')
+    .select('signal_id')
+    .eq('user_id', userId)
+    .gte('bet_date', startOfDay.toISOString())
+    .not('signal_id', 'is', null);
+  if (error || !data) return new Set();
+  return new Set(data.map((row) => row.signal_id as number).filter(Boolean));
+}
