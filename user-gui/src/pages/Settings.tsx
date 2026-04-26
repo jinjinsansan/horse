@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { upsertOiageState, fetchActiveOiage } from '@/lib/api/oiage';
-import { RefreshCw, Download, CheckCircle } from 'lucide-react';
+import { GzWindow, MatrixBg, Corners } from '@/components/gantz';
+
+type BetMode = 'manual' | 'bulk' | 'first_only' | 'sequential';
 
 interface CredentialForm {
   ipatId: string;
@@ -11,46 +13,39 @@ interface CredentialForm {
   ipatPin: string;
   spatMemberNumber: string;
   spatMemberId: string;
-  spatPassword: string; // SPAT4暗証番号
+  spatPassword: string;
+  betAmount: number;
+  betMode: BetMode;
   oiageBaseAmount: number;
   oiageTargetProfit: number;
   oiageMaxSteps: number;
 }
 
-const normalizeCredentialValue = (value: unknown) => {
-  if (typeof value === 'string') return value.trim();
-  if (typeof value === 'number') return String(value);
-  if (value === null || value === undefined) return '';
-  return String(value).trim();
+const BET_AMOUNT_MIN = 100;
+const BET_AMOUNT_MAX = 50000;
+const BET_AMOUNT_STEP = 100;
+
+const norm = (v: unknown) => {
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number') return String(v);
+  if (v === null || v === undefined) return '';
+  return String(v).trim();
 };
 
 export default function Settings() {
-  const [autoBetEnabled, setAutoBetEnabled] = useState(false);
-  const [cred, setCred] = useState<CredentialForm>({
-    ipatId: '',
-    ipatUserCode: '',
-    ipatPassword: '',
-    ipatPin: '',
-    spatMemberNumber: '',
-    spatMemberId: '',
-    spatPassword: '',
-    oiageBaseAmount: 1000,
-    oiageTargetProfit: 10000,
-    oiageMaxSteps: 5,
-  });
   const [oiageEnabled, setOiageEnabled] = useState(false);
+  const [cred, setCred] = useState<CredentialForm>({
+    ipatId: '', ipatUserCode: '', ipatPassword: '', ipatPin: '',
+    spatMemberNumber: '', spatMemberId: '', spatPassword: '',
+    betAmount: 100,
+    betMode: 'manual',
+    oiageBaseAmount: 1000, oiageTargetProfit: 10000, oiageMaxSteps: 5,
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [appVersion, setAppVersion] = useState('');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<'trial' | 'active' | 'expired' | 'suspended'>('trial');
   const navigate = useNavigate();
-
-  const [currentVersion, setCurrentVersion] = useState('');
-  const [updateChecking, setUpdateChecking] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [latestVersion, setLatestVersion] = useState('');
-  const [updateDownloading, setUpdateDownloading] = useState(false);
-  const [updateReady, setUpdateReady] = useState(false);
-  const [updateMessage, setUpdateMessage] = useState('');
-  const [playwrightReady, setPlaywrightReady] = useState(true);
 
   useEffect(() => {
     const load = async () => {
@@ -58,111 +53,56 @@ export default function Settings() {
       if (!user.user) return;
       const { data } = await supabase
         .from('user_profiles')
-        .select('auto_bet_enabled, ipat_credentials, spat4_credentials, settings')
+        .select('auto_bet_enabled, ipat_credentials, spat4_credentials, settings, subscription_status')
         .eq('id', user.user.id)
         .single();
       if (data) {
-        const spatRaw = data.spat4_credentials ?? {};
-        const spatMemberNumber = normalizeCredentialValue(spatRaw.member_number ?? spatRaw.memberNumber ?? spatRaw.user_id ?? '');
-        const spatMemberId = normalizeCredentialValue(spatRaw.member_id ?? spatRaw.memberId ?? spatRaw.password ?? '');
-        const spatPassword = normalizeCredentialValue(spatRaw.spat_password ?? spatRaw.ansho ?? '');
-        setAutoBetEnabled(data.auto_bet_enabled ?? false);
+        const sp = data.spat4_credentials ?? {};
+        setSubscriptionStatus((data.subscription_status as typeof subscriptionStatus | null) ?? 'trial');
+        // bet_mode は settings.bet_mode を優先。互換: auto_bet_enabled だけが true の旧データは sequential 扱い
+        const savedMode = (data.settings?.bet_mode as BetMode | undefined)
+          ?? (data.auto_bet_enabled ? 'sequential' : 'manual');
         setCred({
           ipatId: data.ipat_credentials?.inet_id ?? '',
           ipatUserCode: data.ipat_credentials?.user_cd ?? '',
           ipatPassword: data.ipat_credentials?.password ?? '',
           ipatPin: data.ipat_credentials?.pin ?? '',
-          spatMemberNumber,
-          spatMemberId,
-          spatPassword,
+          spatMemberNumber: norm(sp.member_number ?? sp.memberNumber ?? sp.user_id ?? ''),
+          spatMemberId: norm(sp.member_id ?? sp.memberId ?? sp.password ?? ''),
+          spatPassword: norm(sp.spat_password ?? sp.ansho ?? ''),
+          betAmount: data.settings?.bet_amount ?? 100,
+          betMode: savedMode,
           oiageBaseAmount: data.settings?.oiage?.baseAmount ?? 1000,
           oiageTargetProfit: data.settings?.oiage?.targetProfit ?? 10000,
           oiageMaxSteps: data.settings?.oiage?.maxSteps ?? 5,
         });
         setOiageEnabled(data.settings?.oiage?.enabled ?? false);
       }
-
       const { data: oiage } = await fetchActiveOiage(user.user.id, 8);
       if (oiage) {
         setOiageEnabled(oiage.is_active);
-        setCred((prev) => ({
-          ...prev,
-          oiageTargetProfit: oiage.target_profit,
-        }));
+        setCred((p) => ({ ...p, oiageTargetProfit: oiage.target_profit }));
       }
-
       if (window.horsebet) {
-        const version = await window.horsebet.getVersion();
-        setCurrentVersion(version);
-
-        if (window.horsebet.isPlaywrightReady) {
-          const ready = await window.horsebet.isPlaywrightReady();
-          setPlaywrightReady(ready);
-        } else {
-          setPlaywrightReady(true);
-        }
-
-        window.horsebet.onUpdateAvailable((newVersion) => {
-          setUpdateAvailable(true);
-          setLatestVersion(newVersion);
-          setUpdateMessage(`新しいバージョン ${newVersion} が利用可能です`);
-        });
-
-        window.horsebet.onUpdateDownloaded(() => {
-          setUpdateDownloading(false);
-          setUpdateReady(true);
-          setUpdateMessage('更新のダウンロードが完了しました');
-        });
-
-        window.horsebet.onUpdateError((error) => {
-          setUpdateDownloading(false);
-          setUpdateMessage(`エラー: ${error}`);
-        });
+        const v = await window.horsebet.getVersion();
+        setAppVersion(v);
       }
     };
     load();
   }, []);
 
-  const handleCheckUpdate = async () => {
-    if (!window.horsebet) return;
-    setUpdateChecking(true);
-    setUpdateMessage('更新を確認中...');
-    const result = await window.horsebet.checkUpdates();
-    setUpdateChecking(false);
-    if (result.available && result.version) {
-      setUpdateAvailable(true);
-      setLatestVersion(result.version);
-      setUpdateMessage(`新しいバージョン ${result.version} が利用可能です`);
-    } else {
-      setUpdateMessage('最新版です');
-      setTimeout(() => setUpdateMessage(''), 3000);
-    }
-  };
-
-  const handleDownloadUpdate = async () => {
-    if (!window.horsebet) return;
-    setUpdateDownloading(true);
-    setUpdateMessage('ダウンロード中...');
-    await window.horsebet.downloadUpdate();
-  };
-
-  const handleInstallUpdate = async () => {
-    if (!window.horsebet) return;
-    await window.horsebet.installUpdate();
-  };
-
   const handleSave = async () => {
     setSaving(true);
     setMessage('');
     const { data: user } = await supabase.auth.getUser();
-    if (!user.user) return;
+    if (!user.user) { setSaving(false); return; }
+
     const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('settings')
-      .eq('id', user.user.id)
-      .single();
-    const mergedSettings = {
+      .from('user_profiles').select('settings').eq('id', user.user.id).single();
+    const merged = {
       ...(profile?.settings ?? {}),
+      bet_amount: cred.betAmount,
+      bet_mode: cred.betMode,
       oiage: {
         enabled: oiageEnabled,
         baseAmount: cred.oiageBaseAmount,
@@ -172,38 +112,31 @@ export default function Settings() {
       role: profile?.settings?.role ?? 'user',
     };
 
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({
-        auto_bet_enabled: autoBetEnabled,
-        ipat_credentials: {
-          inet_id: cred.ipatId,
-          user_cd: cred.ipatUserCode,
-          password: cred.ipatPassword,
-          pin: cred.ipatPin,
-        },
-        spat4_credentials: {
-          member_number: normalizeCredentialValue(cred.spatMemberNumber),
-          member_id: normalizeCredentialValue(cred.spatMemberId),
-          spat_password: normalizeCredentialValue(cred.spatPassword),
-          user_id: normalizeCredentialValue(cred.spatMemberNumber),
-          password: normalizeCredentialValue(cred.spatMemberId),
-        },
-        settings: mergedSettings,
-      })
-      .eq('id', user.user.id);
+    const { error } = await supabase.from('user_profiles').update({
+      auto_bet_enabled: cred.betMode !== 'manual',
+      ipat_credentials: {
+        inet_id: cred.ipatId,
+        user_cd: cred.ipatUserCode,
+        password: cred.ipatPassword,
+        pin: cred.ipatPin,
+      },
+      spat4_credentials: {
+        member_number: norm(cred.spatMemberNumber),
+        member_id: norm(cred.spatMemberId),
+        spat_password: norm(cred.spatPassword),
+        user_id: norm(cred.spatMemberNumber),
+        password: norm(cred.spatMemberId),
+      },
+      settings: merged,
+    }).eq('id', user.user.id);
 
     if (error) {
-      setMessage(error.message);
+      setMessage(`エラー: ${error.message}`);
     } else {
       await upsertOiageState({
-        userId: user.user.id,
-        betType: 8,
-        betTypeName: '3連単',
-        targetProfit: cred.oiageTargetProfit,
-        baseAmount: cred.oiageBaseAmount,
-        maxSteps: cred.oiageMaxSteps,
-        isActive: oiageEnabled,
+        userId: user.user.id, betType: 8, betTypeName: '3連単',
+        targetProfit: cred.oiageTargetProfit, baseAmount: cred.oiageBaseAmount,
+        maxSteps: cred.oiageMaxSteps, isActive: oiageEnabled,
       });
       setMessage('設定を保存しました');
     }
@@ -211,280 +144,264 @@ export default function Settings() {
   };
 
   return (
-    <div className="settings-page">
-      <div className="settings-card">
-        <header>
+    <GzWindow title="競馬GANTZ" subtitle="SYSTEM SETTINGS">
+      <MatrixBg density={10} />
+      <div style={{ position: 'relative', padding: '24px 32px', height: '100%', overflowY: 'auto' }} className="gz-noscroll">
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
           <div>
-            <p className="label">SYSTEM SETTINGS</p>
-            <h1>⚙️ システム設定</h1>
-            <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>自動投票 / 認証情報 / 追い上げ設定</p>
+            <div className="gz-label">SYSTEM SETTINGS</div>
+            <div style={{ fontFamily: 'var(--gz-jp-serif)', fontSize: 36, fontWeight: 900 }} className="gz-glow">
+              ⚙ システム設定
+            </div>
           </div>
-          <button className="secondary" onClick={() => navigate(-1)}>
-            ← 戻る
-          </button>
-        </header>
+          <button onClick={() => navigate('/')} className="gz-btn gz-btn-ghost">← 戻る</button>
+        </div>
 
-        <section>
-          <div className="section-head">
-            <h2>自動投票</h2>
-          </div>
-          <label className="toggle">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 1100 }}>
+          {/* 01 投票モード */}
+          <section className="gz-panel" style={{ padding: 22, position: 'relative', gridColumn: '1 / -1' }}>
+            <Corners />
+            <div className="gz-label-strong">01 / BET MODE</div>
+            <div style={{ fontFamily: 'var(--gz-jp-serif)', fontSize: 22, fontWeight: 700, marginTop: 4 }} className="gz-glow">投票モード</div>
+            <p style={{ fontSize: 11, color: 'var(--gz-text-muted)', marginTop: 6 }}>
+              競馬GANTZ から配信を受信したときの動作を選びます
+            </p>
+            <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              {([
+                { mode: 'manual',     title: '手動',           desc: 'GUI は購入しません。各レース 10 分前にメイン画面が切り替わるので、手動の購入ボタンで投票します。' },
+                { mode: 'bulk',       title: '一気購入',       desc: '配信を受信した瞬間に当日全レースを即座に購入します。残高に余裕がある人向け。' },
+                { mode: 'first_only', title: '早いレース1本', desc: '当日の最も早いレース 1 件だけを即座に購入します。試運用に最適。' },
+                { mode: 'sequential', title: '順次購入',       desc: '各レースの発走 5 分前にレース毎に購入します。残高をレースごとに使う標準モード。' },
+              ] as Array<{ mode: BetMode; title: string; desc: string }>).map((opt) => {
+                const active = cred.betMode === opt.mode;
+                return (
+                  <button
+                    key={opt.mode}
+                    type="button"
+                    onClick={() => setCred(p => ({ ...p, betMode: opt.mode }))}
+                    style={{
+                      textAlign: 'left',
+                      padding: '14px 16px',
+                      background: active ? 'rgba(0, 255, 130, 0.12)' : 'rgba(0, 20, 10, 0.4)',
+                      border: `1px solid ${active ? 'var(--gz-green)' : 'var(--gz-line)'}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      boxShadow: active ? '0 0 18px var(--gz-green-glow)' : 'none',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span
+                        style={{
+                          fontFamily: 'var(--gz-display)',
+                          fontWeight: 700,
+                          letterSpacing: '0.1em',
+                          fontSize: 16,
+                          color: active ? 'var(--gz-green)' : 'var(--gz-text)',
+                        }}
+                        className={active ? 'gz-glow' : ''}
+                      >
+                        {opt.title}
+                      </span>
+                      {active && <span className="gz-badge"><span className="gz-dot" />ACTIVE</span>}
+                    </div>
+                    <p style={{
+                      margin: 0, fontSize: 11, lineHeight: 1.6,
+                      color: active ? 'var(--gz-text)' : 'var(--gz-text-muted)',
+                    }}>
+                      {opt.desc}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ marginTop: 14, fontSize: 11, color: 'var(--gz-text-muted)', lineHeight: 1.7 }}>
+              ※ 自動モード(一気/早いレース1本/順次)は本アプリが起動中のみ動作します。PC を起動したままにしてください。
+            </p>
+          </section>
+
+          {/* 01.5 BET AMOUNT */}
+          <section className="gz-panel" style={{ padding: 22, position: 'relative' }}>
+            <Corners />
+            <div className="gz-label-strong">02 / BET AMOUNT</div>
+            <div style={{ fontFamily: 'var(--gz-jp-serif)', fontSize: 22, fontWeight: 700, marginTop: 4 }} className="gz-glow">BET 金額</div>
+            <p style={{ fontSize: 11, color: 'var(--gz-text-muted)', marginTop: 6 }}>
+              1 レース 1 馬券あたりの単勝 BET 金額（{BET_AMOUNT_MIN.toLocaleString()}〜{BET_AMOUNT_MAX.toLocaleString()}円）
+            </p>
+            <div style={{ marginTop: 18, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{
+                fontFamily: 'var(--gz-display)', fontSize: 42, fontWeight: 900,
+                color: 'var(--gz-green)', lineHeight: 1,
+              }} className="gz-glow-strong">
+                ¥{cred.betAmount.toLocaleString()}
+              </span>
+              <span style={{ fontFamily: 'var(--gz-mono)', fontSize: 11, color: 'var(--gz-text-muted)', letterSpacing: '0.15em' }}>
+                / RACE
+              </span>
+            </div>
             <input
-              type="checkbox"
-              checked={autoBetEnabled}
-              onChange={(event) => setAutoBetEnabled(event.target.checked)}
+              type="range"
+              min={BET_AMOUNT_MIN}
+              max={BET_AMOUNT_MAX}
+              step={BET_AMOUNT_STEP}
+              value={cred.betAmount}
+              onChange={(e) => setCred(p => ({ ...p, betAmount: Number(e.target.value) }))}
+              style={{
+                width: '100%', marginTop: 14,
+                accentColor: 'var(--gz-green)', cursor: 'pointer',
+              }}
             />
-            <span>配信された買い目を自動で投票する（GANTZ 自動購入を有効にする場合は ON）</span>
-          </label>
-          <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
-            ※ 自動投票は本アプリが起動中のみ動作します。GANTZ 配信は 09:00 JST 以降にレース発走 5 分前まで予約され、PC を起動しておく必要があります。
-          </p>
-        </section>
-
-        <section>
-          <h2>IPAT 認証情報（JRA 自動投票用）</h2>
-          <div className="grid">
-            <label>
-              加入者番号（Internet ID）
-              <input
-                value={cred.ipatId}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatId: event.target.value }))}
-                placeholder="P12345678"
-              />
-            </label>
-            <label>
-              ユーザーコード
-              <input
-                value={cred.ipatUserCode}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatUserCode: event.target.value }))}
-                placeholder="4桁"
-              />
-            </label>
-            <label>
-              パスワード
-              <input
-                type="password"
-                value={cred.ipatPassword}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatPassword: event.target.value }))}
-              />
-            </label>
-            <label>
-              暗証番号（PIN）
-              <input
-                type="password"
-                value={cred.ipatPin}
-                onChange={(event) => setCred((prev) => ({ ...prev, ipatPin: event.target.value }))}
-                placeholder="4桁"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section>
-          <h2>SPAT4 認証情報（NAR 自動投票用）</h2>
-          <p className="muted" style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-            GANTZ の配信対象は地方競馬（NAR）が中心のため、SPAT4 認証情報の登録を推奨します。
-          </p>
-          <div className="grid">
-            <label>
-              加入者番号
-              <input
-                value={cred.spatMemberNumber}
-                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberNumber: event.target.value }))}
-                placeholder="10桁"
-              />
-            </label>
-            <label>
-              利用者ID
-              <input
-                type="password"
-                value={cred.spatMemberId}
-                onChange={(event) => setCred((prev) => ({ ...prev, spatMemberId: event.target.value }))}
-              />
-            </label>
-            <label>
-              暗証番号
-              <input
-                type="password"
-                value={cred.spatPassword}
-                onChange={(event) => setCred((prev) => ({ ...prev, spatPassword: event.target.value }))}
-                placeholder="4桁"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section>
-          <div className="section-head" style={{ justifyContent: 'space-between' }}>
-            <div>
-              <h2>追い上げ設定（3連単）</h2>
-              <p className="muted">ベース金額と目標利益を指定してください（GANTZ 単勝運用では使用しません）</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--gz-mono)', fontSize: 9, color: 'var(--gz-text-muted)', marginTop: 4 }}>
+              <span>¥100</span>
+              <span>¥1,000</span>
+              <span>¥10,000</span>
+              <span>¥50,000</span>
             </div>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={oiageEnabled}
-                onChange={(event) => setOiageEnabled(event.target.checked)}
-              />
-              <span>追い上げを有効化</span>
-            </label>
-          </div>
-          <div className="grid">
-            <label>
-              ベース金額（1回目）
-              <input
-                type="number"
-                min={100}
-                step={100}
-                value={cred.oiageBaseAmount}
-                onChange={(event) => setCred((prev) => ({ ...prev, oiageBaseAmount: Number(event.target.value) }))}
-              />
-            </label>
-            <label>
-              目標利益額
-              <input
-                type="number"
-                min={1000}
-                step={500}
-                value={cred.oiageTargetProfit}
-                onChange={(event) => setCred((prev) => ({ ...prev, oiageTargetProfit: Number(event.target.value) }))}
-              />
-            </label>
-            <label>
-              最大ステップ数
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={cred.oiageMaxSteps}
-                onChange={(event) => setCred((prev) => ({ ...prev, oiageMaxSteps: Number(event.target.value) }))}
-              />
-            </label>
-          </div>
-        </section>
+            <div style={{ marginTop: 14, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[100, 500, 1000, 3000, 5000, 10000, 30000, 50000].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setCred(p => ({ ...p, betAmount: preset }))}
+                  className={`gz-btn ${cred.betAmount === preset ? '' : 'gz-btn-ghost'}`}
+                  style={{ padding: '4px 10px', fontSize: 10 }}
+                >
+                  ¥{preset.toLocaleString()}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: 10, color: 'var(--gz-text-muted)', marginTop: 12, lineHeight: 1.6 }}>
+              ※ 自動 BET 時にこの金額で投票します(設計中)。手動投票時は配信の推奨額が優先されます。
+            </p>
+          </section>
 
-        {!playwrightReady ? (
-          <section>
-            <h2>投票ブラウザセットアップ</h2>
-            <div style={{ padding: '1rem', backgroundColor: '#fef3c7', borderRadius: '0.5rem', marginBottom: '1rem' }}>
-              <p style={{ fontWeight: '600', marginBottom: '0.5rem' }}>⚠️ 初回セットアップが必要です</p>
-              <p style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-                自動投票機能を使用するには、Playwrightブラウザのインストールが必要です。
-              </p>
-              <p style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-                インストール手順：
-              </p>
-              <ol style={{ fontSize: '0.875rem', marginLeft: '1.5rem', lineHeight: '1.75' }}>
-                <li>Windowsキーを押して「cmd」と入力し、コマンドプロンプトを開く</li>
-                <li>以下のコマンドをコピー＆ペーストして Enter を押す：</li>
-              </ol>
-              <div style={{ 
-                backgroundColor: '#1f2937', 
-                color: '#f3f4f6', 
-                padding: '0.75rem', 
-                borderRadius: '0.375rem', 
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                marginTop: '0.5rem',
-                marginBottom: '0.5rem',
-                userSelect: 'all'
-              }}>
-                npx playwright install chromium
-              </div>
-              <p style={{ fontSize: '0.875rem' }}>
-                ※ インストールは初回のみ必要で、約1-2分かかります。
-              </p>
+          {/* 03 SPAT4 (地方競馬 = メイン) */}
+          <section className="gz-panel" style={{ padding: 22, position: 'relative', borderColor: 'var(--gz-line-strong)', boxShadow: '0 0 18px var(--gz-green-glow)' }}>
+            <Corners />
+            <div className="gz-label-strong">03 / SPAT4</div>
+            <div style={{ fontFamily: 'var(--gz-jp-serif)', fontSize: 22, fontWeight: 700, marginTop: 4 }} className="gz-glow">SPAT4 認証情報 <span className="gz-badge" style={{ marginLeft: 8, fontSize: 9 }}>必須</span></div>
+            <p style={{ fontSize: 11, color: 'var(--gz-text-muted)', marginTop: 6, lineHeight: 1.6 }}>
+              競馬GANTZ は <strong style={{ color: 'var(--gz-green)' }}>地方競馬専用</strong> サービスです。SPAT4 (NAR) の認証情報を必ず登録してください。
+            </p>
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>加入者番号</div>
+                <input className="gz-input" value={cred.spatMemberNumber} onChange={(e) => setCred(p => ({ ...p, spatMemberNumber: e.target.value }))} placeholder="10桁" />
+              </label>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>利用者ID</div>
+                <input type="password" className="gz-input" value={cred.spatMemberId} onChange={(e) => setCred(p => ({ ...p, spatMemberId: e.target.value }))} />
+              </label>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>暗証番号</div>
+                <input type="password" className="gz-input" value={cred.spatPassword} onChange={(e) => setCred(p => ({ ...p, spatPassword: e.target.value }))} placeholder="4桁" />
+              </label>
             </div>
           </section>
-        ) : (
-          <section>
-            <h2>投票ブラウザ</h2>
-            <div style={{
-              padding: '1rem',
-              backgroundColor: '#ecfccb',
-              borderRadius: '0.5rem',
-              marginBottom: '1rem',
-              color: '#365314',
-              fontSize: '0.9rem',
-            }}>
-              Playwrightブラウザはアプリに同梱済みのため、追加セットアップは不要です。
+
+          {/* 04 IPAT (JRA = 補助) */}
+          <section className="gz-panel" style={{ padding: 22, position: 'relative', opacity: 0.85 }}>
+            <Corners />
+            <div className="gz-label-strong">04 / IPAT</div>
+            <div style={{ fontFamily: 'var(--gz-jp-serif)', fontSize: 22, fontWeight: 700, marginTop: 4 }} className="gz-glow">IPAT 認証情報 <span className="gz-badge gz-badge-dim" style={{ marginLeft: 8, fontSize: 9 }}>任意</span></div>
+            <p style={{ fontSize: 11, color: 'var(--gz-text-muted)', marginTop: 6, lineHeight: 1.6 }}>
+              中央競馬 (JRA) の配信が稀に来た時のみ使用。地方競馬専用運用なら登録不要。
+            </p>
+            <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>加入者番号</div>
+                <input className="gz-input" value={cred.ipatId} onChange={(e) => setCred(p => ({ ...p, ipatId: e.target.value }))} placeholder="P12345678" />
+              </label>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>ユーザーコード</div>
+                <input className="gz-input" value={cred.ipatUserCode} onChange={(e) => setCred(p => ({ ...p, ipatUserCode: e.target.value }))} placeholder="4桁" />
+              </label>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>パスワード</div>
+                <input type="password" className="gz-input" value={cred.ipatPassword} onChange={(e) => setCred(p => ({ ...p, ipatPassword: e.target.value }))} />
+              </label>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>暗証番号 PIN</div>
+                <input type="password" className="gz-input" value={cred.ipatPin} onChange={(e) => setCred(p => ({ ...p, ipatPin: e.target.value }))} placeholder="4桁" />
+              </label>
             </div>
           </section>
-        )}
 
-        <section>
-          <h2>アプリ更新</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* 04 SUBSCRIPTION + VERSION */}
+          <section className="gz-panel" style={{ padding: 22, position: 'relative' }}>
+            <Corners />
+            <div className="gz-label-strong">04 / SUBSCRIPTION</div>
+            <div style={{ fontFamily: 'var(--gz-jp-serif)', fontSize: 22, fontWeight: 700, marginTop: 4 }} className="gz-glow">サブスクリプション</div>
+            <div style={{ marginTop: 14 }}>
+              <span className={`gz-badge ${subscriptionStatus === 'expired' || subscriptionStatus === 'suspended' ? 'gz-badge-red' : ''}`}>
+                ● {subscriptionStatus.toUpperCase()}
+              </span>
+            </div>
+            <div className="gz-divider" />
+            <div className="gz-label-strong">05 / VERSION</div>
+            <div style={{ fontFamily: 'var(--gz-mono)', fontSize: 11, color: 'var(--gz-text-dim)', marginTop: 8, lineHeight: 1.7 }}>
+              <div>App: <span style={{ color: 'var(--gz-green)' }}>v{appVersion || '—'}</span></div>
+              <div>GANTZ Engine: <span style={{ color: 'var(--gz-green)' }}>● ONLINE</span></div>
+              <div>投票ブラウザ: <span style={{ color: 'var(--gz-green)' }}>● READY</span></div>
+            </div>
+          </section>
+
+          {/* 06 OIAGE (追い上げ) */}
+          <section className="gz-panel" style={{ padding: 22, position: 'relative', gridColumn: '1 / -1' }}>
+            <Corners />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <p className="muted">現在のバージョン</p>
-                <p style={{ fontSize: '1.25rem', fontWeight: '600', marginTop: '0.25rem' }}>
-                  {currentVersion ? `v${currentVersion}` : '読み込み中...'}
+                <div className="gz-label-strong">06 / OIAGE</div>
+                <div style={{ fontFamily: 'var(--gz-jp-serif)', fontSize: 22, fontWeight: 700, marginTop: 4 }} className="gz-glow">追い上げ設定 (3連単)</div>
+                <p style={{ fontSize: 10, color: 'var(--gz-text-muted)', marginTop: 4 }}>
+                  GANTZ 単勝運用では使用しません
                 </p>
               </div>
-              <button
-                className="secondary"
-                onClick={handleCheckUpdate}
-                disabled={updateChecking || updateDownloading}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-              >
-                <RefreshCw size={16} className={updateChecking ? 'spin' : ''} />
-                {updateChecking ? '確認中...' : '更新をチェック'}
-              </button>
-            </div>
-
-            {updateMessage && (
               <div
-                style={{
-                  padding: '0.75rem 1rem',
-                  borderRadius: '0.5rem',
-                  backgroundColor: updateAvailable ? '#dbeafe' : updateReady ? '#dcfce7' : '#f3f4f6',
-                  color: updateAvailable ? '#1e40af' : updateReady ? '#166534' : '#374151',
-                }}
-              >
-                {updateMessage}
-              </div>
-            )}
+                className={`gz-switch ${oiageEnabled ? 'on' : ''}`}
+                onClick={() => setOiageEnabled(!oiageEnabled)}
+                role="button"
+                style={{ width: 64, height: 28 }}
+              />
+            </div>
+            <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>ベース金額</div>
+                <input type="number" min={100} step={100} className="gz-input" value={cred.oiageBaseAmount} onChange={(e) => setCred(p => ({ ...p, oiageBaseAmount: Number(e.target.value) }))} />
+              </label>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>目標利益額</div>
+                <input type="number" min={1000} step={500} className="gz-input" value={cred.oiageTargetProfit} onChange={(e) => setCred(p => ({ ...p, oiageTargetProfit: Number(e.target.value) }))} />
+              </label>
+              <label>
+                <div className="gz-label" style={{ marginBottom: 4 }}>最大ステップ数</div>
+                <input type="number" min={1} max={10} className="gz-input" value={cred.oiageMaxSteps} onChange={(e) => setCred(p => ({ ...p, oiageMaxSteps: Number(e.target.value) }))} />
+              </label>
+            </div>
+          </section>
+        </div>
 
-            {updateAvailable && !updateReady && (
-              <button
-                className="primary"
-                onClick={handleDownloadUpdate}
-                disabled={updateDownloading}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}
-              >
-                <Download size={16} />
-                {updateDownloading ? 'ダウンロード中...' : `v${latestVersion} をダウンロード`}
-              </button>
-            )}
-
-            {updateReady && (
-              <button
-                className="primary"
-                onClick={handleInstallUpdate}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  justifyContent: 'center',
-                  backgroundColor: '#16a34a',
-                }}
-              >
-                <CheckCircle size={16} />
-                再起動してインストール
-              </button>
-            )}
+        {message && (
+          <div
+            style={{
+              marginTop: 20, padding: '10px 14px',
+              border: `1px solid ${message.startsWith('エラー') ? 'var(--gz-red)' : 'var(--gz-green)'}`,
+              color: message.startsWith('エラー') ? 'var(--gz-red)' : 'var(--gz-green)',
+              fontFamily: 'var(--gz-mono)', fontSize: 12,
+              maxWidth: 1100,
+              background: message.startsWith('エラー') ? 'rgba(255,60,60,0.08)' : 'rgba(0,255,130,0.05)',
+            }}
+          >
+            {message}
           </div>
-        </section>
+        )}
 
-        {message && <p className="info">{message}</p>}
-
-        <div className="actions">
-          <button className="primary" onClick={handleSave} disabled={saving}>
-            {saving ? '保存中...' : '保存する'}
+        <div style={{ marginTop: 24, display: 'flex', gap: 10 }}>
+          <button onClick={handleSave} disabled={saving} className="gz-btn gz-btn-primary">
+            {saving ? '保存中…' : '設定を保存'}
           </button>
+          <button onClick={() => navigate('/')} className="gz-btn gz-btn-ghost">キャンセル</button>
         </div>
       </div>
-    </div>
+    </GzWindow>
   );
 }

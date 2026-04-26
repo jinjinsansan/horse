@@ -16,7 +16,6 @@
   --gz-amber: #ffb800;
   --gz-red: #ff3b3b;
   --gz-text: #d8ffe9;
-  --gz-text-strong: #f4fff8;
   --gz-text-dim: #6dbf95;
   --gz-text-muted: #3d7a5b;
 
@@ -177,136 +176,41 @@
 .gz-corner.bl { bottom: 6px; left: 6px; border-right: none; border-top: none; }
 .gz-corner.br { bottom: 6px; right: 6px; border-left: none; border-top: none; }
 
-/* オーブ (黒球体) — 立体感強化 v3 */
+/* オーブ (黒球体) */
 .gz-orb {
   position: relative;
   border-radius: 50%;
   background:
-    /* dim broad top sheen (no overpowering bright spot) */
-    radial-gradient(ellipse 55% 32% at 40% 18%, rgba(180, 255, 220, 0.18) 0%, rgba(60, 255, 160, 0.05) 40%, transparent 65%),
-    /* strong bottom rim glow (signature) */
-    radial-gradient(circle at 50% 122%, rgba(0, 255, 130, 1.0) 0%, rgba(0, 220, 110, 0.5) 18%, rgba(0, 130, 60, 0.18) 40%, transparent 60%),
-    /* top-right small secondary reflection */
-    radial-gradient(ellipse 14% 8% at 72% 30%, rgba(180, 255, 210, 0.20) 0%, transparent 60%),
-    /* equatorial dark shadow band */
-    radial-gradient(ellipse 100% 55% at 50% 78%, rgba(0, 25, 12, 0.82) 0%, rgba(0, 0, 0, 0.5) 55%, transparent 78%),
-    /* base sphere body */
-    radial-gradient(circle at 45% 42%, #0a3522 0%, #052015 38%, #010705 75%, #000 100%);
+    radial-gradient(circle at 35% 30%, rgba(80, 255, 160, 0.18) 0%, rgba(0, 50, 25, 0.4) 30%, #000 70%),
+    radial-gradient(circle at 50% 110%, rgba(0, 255, 130, 0.5) 0%, transparent 35%),
+    radial-gradient(circle at 50% 50%, #051a10, #000 70%);
   box-shadow:
-    /* heavy bottom inner darkness (sphere depth) */
-    inset 0 -70px 120px rgba(0, 0, 0, 0.8),
-    /* underglow inside lower half */
-    inset 0 -50px 140px rgba(0, 255, 130, 0.45),
-    /* very subtle top inner light */
-    inset 0 20px 60px rgba(160, 255, 200, 0.10),
-    /* clear rim line */
-    inset 0 0 0 1px rgba(0, 255, 130, 0.55),
-    /* outer atmospheric halo (3 stops) */
-    0 0 80px rgba(0, 255, 130, 0.6),
-    0 0 180px rgba(0, 255, 130, 0.28),
-    0 0 320px rgba(0, 255, 130, 0.12),
-    /* drop shadow under orb */
-    0 60px 140px rgba(0, 0, 0, 0.88);
+    inset 0 -30px 60px rgba(0, 255, 130, 0.18),
+    inset 0 0 40px rgba(0, 0, 0, 0.9),
+    0 0 60px rgba(0, 255, 130, 0.35),
+    0 0 120px rgba(0, 255, 130, 0.15);
   overflow: hidden;
-  /* 球体外周の halo がゆっくり呼吸する */
-  animation: gz-orb-halo 4.5s ease-in-out infinite;
 }
-
-/* 外周 halo の脈動 — 内部 inset / rim / outer の 3 段階を同時に膨縮 */
-@keyframes gz-orb-halo {
-  0%, 100% {
-    box-shadow:
-      inset 0 -70px 120px rgba(0, 0, 0, 0.8),
-      inset 0 -50px 140px rgba(0, 255, 130, 0.40),
-      inset 0 20px 60px rgba(160, 255, 200, 0.10),
-      inset 0 0 0 1px rgba(0, 255, 130, 0.50),
-      0 0 70px rgba(0, 255, 130, 0.55),
-      0 0 160px rgba(0, 255, 130, 0.25),
-      0 0 280px rgba(0, 255, 130, 0.10),
-      0 60px 140px rgba(0, 0, 0, 0.88);
-  }
-  50% {
-    box-shadow:
-      inset 0 -70px 120px rgba(0, 0, 0, 0.8),
-      inset 0 -50px 140px rgba(0, 255, 130, 0.65),
-      inset 0 20px 60px rgba(160, 255, 200, 0.16),
-      inset 0 0 0 1px rgba(0, 255, 130, 0.90),
-      0 0 110px rgba(0, 255, 130, 0.90),
-      0 0 240px rgba(0, 255, 130, 0.50),
-      0 0 420px rgba(0, 255, 130, 0.22),
-      0 60px 140px rgba(0, 0, 0, 0.88);
-  }
-}
-/* fine circuit grid (lower hemisphere for depth) */
 .gz-orb::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
   background-image:
-    repeating-linear-gradient(0deg, transparent 0, transparent 7px, rgba(0,255,130,0.10) 7px, rgba(0,255,130,0.10) 8px),
-    repeating-linear-gradient(90deg, transparent 0, transparent 7px, rgba(0,255,130,0.06) 7px, rgba(0,255,130,0.06) 8px);
-  mask-image: radial-gradient(circle at 50% 72%, black 30%, transparent 72%);
-  opacity: 0.55;
+    repeating-linear-gradient(0deg, transparent 0, transparent 6px, rgba(0,255,130,0.1) 6px, rgba(0,255,130,0.1) 7px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 6px, rgba(0,255,130,0.06) 6px, rgba(0,255,130,0.06) 7px);
+  mask-image: radial-gradient(circle at 50% 50%, black 50%, transparent 75%);
+  opacity: 0.7;
 }
-/* small specular dot (top-left) + rim ring */
 .gz-orb::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: 50%;
   background:
-    /* small top-left specular (much smaller than before, away from text area) */
-    radial-gradient(ellipse 10% 5% at 30% 15%, rgba(255,255,255,0.55) 0%, transparent 70%),
-    /* underside soft reflection */
-    radial-gradient(ellipse 30% 15% at 60% 82%, rgba(0, 255, 170, 0.45) 0%, transparent 65%),
-    /* sharp rim catching light */
-    radial-gradient(circle at 50% 50%, transparent 94%, rgba(160, 255, 200, 0.6) 96%, rgba(0, 255, 130, 0.9) 98%, transparent 100%);
+    radial-gradient(ellipse 60% 30% at 35% 25%, rgba(255,255,255,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 30% 15% at 70% 80%, rgba(0, 255, 130, 0.3) 0%, transparent 60%);
   pointer-events: none;
-}
-
-/* ─── オーブ内テキスト: 控えめ glow + ゆっくり呼吸 ─── */
-.gz-orb-text {
-  color: var(--gz-text-strong);
-  text-shadow:
-    0 0 3px rgba(255, 255, 255, 0.45),
-    0 0 10px rgba(0, 255, 130, 0.30);
-  animation: gz-breathe-slow 4s ease-in-out infinite;
-}
-.gz-orb-text-soft {
-  color: var(--gz-text-dim);
-  text-shadow: none;
-  animation: gz-breathe-slow 5.5s ease-in-out infinite;
-  animation-delay: 0.8s;
-}
-.gz-orb-text-num {
-  color: #ffffff;
-  text-shadow:
-    0 0 6px rgba(255, 255, 255, 0.5),
-    0 0 18px rgba(0, 255, 130, 0.45),
-    0 0 40px rgba(0, 255, 130, 0.22);
-  animation: gz-pulse-num 3s ease-in-out infinite;
-}
-
-@keyframes gz-breathe-slow {
-  0%, 100% { opacity: 1.0; }
-  50%      { opacity: 0.55; }
-}
-@keyframes gz-pulse-num {
-  0%, 100% {
-    opacity: 1.0;
-    text-shadow:
-      0 0 6px rgba(255, 255, 255, 0.5),
-      0 0 18px rgba(0, 255, 130, 0.45),
-      0 0 40px rgba(0, 255, 130, 0.22);
-  }
-  50% {
-    opacity: 0.85;
-    text-shadow:
-      0 0 4px rgba(255, 255, 255, 0.6),
-      0 0 26px rgba(0, 255, 130, 0.65),
-      0 0 60px rgba(0, 255, 130, 0.35);
-  }
 }
 .gz-orb-content {
   position: absolute;
@@ -529,18 +433,3 @@
   border-color: var(--gz-green);
   box-shadow: 0 0 30px rgba(0, 255, 130, 0.3), inset 0 0 20px rgba(0, 255, 130, 0.05);
 }
-
-/* ─── Base reset (gantz.css の世界観に合わせるための土台) ─── */
-* { box-sizing: border-box; }
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  background: var(--gz-bg);
-  color: var(--gz-text);
-  font-family: var(--gz-jp);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  overflow: hidden;
-}
-button, input, textarea, select { font: inherit; color: inherit; }
-::selection { background: var(--gz-green); color: #000; }

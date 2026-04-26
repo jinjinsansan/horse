@@ -5,6 +5,10 @@ import { supabase } from '@/lib/supabase';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Settings from '@/pages/Settings';
+import RaceList from '@/pages/RaceList';
+import RaceDetail from '@/pages/RaceDetail';
+import History from '@/pages/History';
+import Notifications from '@/pages/Notifications';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -29,7 +33,7 @@ export default function App() {
     return (
       <div className="splash">
         <div className="splash-card">
-          <p className="text">HorseBetを起動しています...</p>
+          <p className="text">競馬GANTZ を起動しています...</p>
         </div>
       </div>
     );
@@ -55,6 +59,38 @@ export default function App() {
           element={
             <Protected session={session}>
               <Settings />
+            </Protected>
+          }
+        />
+        <Route
+          path="/races"
+          element={
+            <Protected session={session}>
+              <RaceList />
+            </Protected>
+          }
+        />
+        <Route
+          path="/races/:id"
+          element={
+            <Protected session={session}>
+              <RaceDetail />
+            </Protected>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <Protected session={session}>
+              <History />
+            </Protected>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <Protected session={session}>
+              <Notifications />
             </Protected>
           }
         />

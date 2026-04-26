@@ -49,7 +49,7 @@
   },
   "build": {
     "appId": "com.horsebet.user",
-    "productName": "HorseBet AI",
+    "productName": "競馬GANTZ",
     "icon": "public/icon.png",
     "files": [
       "dist/**/*",

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>競馬GANTZ — UI Design Canvas</title>
+<link rel="stylesheet" href="styles/gantz.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  body { margin: 0; background: #f0eee9; font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="data/mock.js"></script>
+<script type="text/babel" src="components/common.jsx"></script>
+<script type="text/babel" src="screens/dashboard-a.jsx"></script>
+<script type="text/babel" src="screens/dashboard-b.jsx"></script>
+<script type="text/babel" src="screens/dashboard-c.jsx"></script>
+<script type="text/babel" src="screens/aux.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="overview" title="競馬GANTZ — UI デザイン提案" subtitle="添付ビジュアル（球体オーブ + マトリックス世界観）を全画面 GUI に展開。3 つのダッシュボード方向 + 主要画面群">
+        <DCArtboard id="overview-note" label="世界観メモ" width={520} height={420}>
+  <div style={{ padding: 32, height: '100%', boxSizing: 'border-box', background: '#fef4a8', color: '#5a4a2a', fontFamily: '-apple-system, system-ui, sans-serif', whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.7 }}>{`■ 世界観
+マトリックス・コード雨、ネオングリーン (#00FF88)、グロー、コーナーマーカー、走査線。 
+中央オーブが「AI が予測した解」を象徴。
+
+■ 機能の対応
+GitHub の競馬GANTZ仕様: VPS 24h監視 / IPAT・SPAT4 自動投票 / D-Logic解析 / 直近30日 60%的中率を、UI の構成要素に反映。`}</div>
+</DCArtboard>
+      </DCSection>
+
+      <DCSection id="dashboards" title="ダッシュボード — 3 方向" subtitle="A: オーブ中心の没入型 / B: グリッド HUD で全レース可視化 / C: ターミナル特化のトレーダー向け">
+        <DCArtboard id="dash-a" label="A · ORB STAGE — 1レース集中・没入型" width={1440} height={920}>
+          <DashboardA />
+        </DCArtboard>
+        <DCArtboard id="dash-b" label="B · GRID HUD — 全レース同時可視化" width={1440} height={920}>
+          <DashboardB />
+        </DCArtboard>
+        <DCArtboard id="dash-c" label="C · TERMINAL — 高密度トレーダー向け" width={1440} height={920}>
+          <DashboardC />
+        </DCArtboard>
+        <DCArtboard id="dash-note" label="比較メモ" width={520} height={420}>
+  <div style={{ padding: 32, height: '100%', boxSizing: 'border-box', background: '#fef4a8', color: '#5a4a2a', fontFamily: '-apple-system, system-ui, sans-serif', whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.7 }}>{`どれが好み？
+
+A = ブランド体験 / 1レース集中
+B = 操作性 / 一覧性
+C = 玄人向け / 情報密度最大
+
+選んだ方向を本実装テンプレに昇格させ、他の補助画面をそれに合わせて統一できます。`}</div>
+</DCArtboard>
+      </DCSection>
+
+      <DCSection id="auth" title="認証フロー" subtitle="Supabase Auth を背景にしたサインイン">
+        <DCArtboard id="login" label="ログイン画面" width={1440} height={920}>
+          <LoginScreen />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="races" title="レース体験" subtitle="本日の配信一覧 → レース詳細（D-Logic 解析・出走表・購入）">
+        <DCArtboard id="race-list" label="レース一覧 — 本日の配信カードグリッド" width={1440} height={920}>
+          <RaceListScreen />
+        </DCArtboard>
+        <DCArtboard id="race-detail" label="レース詳細 — D-Logic 解析と出走表" width={1440} height={920}>
+          <RaceDetailScreen />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="ops" title="運用画面" subtitle="設定（IPAT/SPAT4）・履歴・通知">
+        <DCArtboard id="settings" label="設定 — Auto Bet / IPAT / SPAT4" width={1440} height={920}>
+          <SettingsScreen />
+        </DCArtboard>
+        <DCArtboard id="history" label="履歴・収支 — 直近30日の的中率と回収率" width={1440} height={920}>
+          <HistoryScreen />
+        </DCArtboard>
+        <DCArtboard id="notifications" label="通知 — イベントログ" width={1440} height={920}>
+          <NotificationsScreen />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="next" title="次のステップ" subtitle="ご確認後に進めたい項目">
+        <DCArtboard id="next-note" label="次のステップ" width={520} height={420}>
+  <div style={{ padding: 32, height: '100%', boxSizing: 'border-box', background: '#fef4a8', color: '#5a4a2a', fontFamily: '-apple-system, system-ui, sans-serif', whiteSpace: 'pre-wrap', fontSize: 15, lineHeight: 1.7 }}>{`▶ 進めたいこと
+
+1. 案 A / B / C のうち、ダッシュボード方向を決定
+2. 決定方向に合わせて他画面を再統一（タイポ・密度・余白）
+3. 投票実行モーダル / 失敗・リトライ・タイムアウトの状態網羅
+4. レース詳細の D-Logic スコア可視化を強化（馬ごとのスコア比較、過去走グラフ）
+5. ダーク / 高コントラスト / 文字サイズの a11y 設定
+6. 通知・サウンド設定（発射前 / 的中時）
+
+コメントを残してください。`}</div>
+</DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

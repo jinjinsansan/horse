@@ -39,7 +39,7 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: 'HorseBet AI',
+    title: '競馬GANTZ v1.00',
     icon: iconPath,
     webPreferences: {
       contextIsolation: true,
