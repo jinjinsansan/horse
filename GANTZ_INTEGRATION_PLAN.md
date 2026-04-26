@@ -1,6 +1,6 @@
 # GANTZ → HorseBet GUI 自動投票連携 実装計画書
 
-最終更新: 2026-04-26
+最終更新: 2026-04-26 (Phase 6 完了 / v1.1.0 タグ)
 
 ## 0. 背景と目的
 
@@ -647,3 +647,234 @@ Phase 1〜5 完了後、factory-droid に包括コードレビューを依頼。
 - **MEDIUM**: ワイルドカード subpath exports に戻して保守性向上
 - **LOW**: 24h 超のタイマーは再計算ループ化
 - **E2E 自動テスト**：未実装。MVP 段階では明日のリアル運用観察で代替
+
+---
+
+## 16. Phase 6 完了レポート (2026-04-26)
+
+claude.ai/design からのハンドオフを受けて UI を Orb Stage 風 HUD に
+全面刷新。投票モード 4 択と GANTZ 全体回収率も同時実装。
+
+### 16-1. デザインハンドオフ受領
+- 配置: `horsebet-system/docs/design_handoff_orb_dashboard/`
+  - `README.md` (仕様書)
+  - `styles/gantz.css` (デザイントークン + 共通クラス、コピペで使える)
+  - `components/common.jsx` (Orb / GzWindow / MatrixBg / Corners / DataBar 等)
+  - `screens/dashboard-a.jsx` (案 A ダッシュボード本体)
+  - `screens/screens-aux.jsx` (Login / RaceList / RaceDetail / Settings / History / Notifications)
+    ※ 元の `aux.jsx` は Windows DOS 予約語 (AUX) と衝突するためリネーム
+  - `data/mock.js` (型サンプル)
+  - `UI Design.html` (プレビュー)
+
+### 16-2. 共通コンポーネント TS 化
+新設: `user-gui/src/components/gantz/`
+- `CodeRain.tsx` / `MatrixBg.tsx` / `GzWindow.tsx` / `Orb.tsx` / `Corners.tsx`
+- `HorseSvg.tsx` / `CourseTrack.tsx` / `DataBar.tsx` / `DonutProgress.tsx` / `Vertical.tsx`
+- `index.ts` re-export
+
+### 16-3. CSS / デザイントークン
+- `user-gui/src/index.css` を `gantz.css` 全採用に置換 (gz-* 体系)
+- Orb の立体感強化 (上部 specular / 下部リムグロー / 装飾グリッドテクスチャ)
+- Orb 外周 halo を `gz-orb-halo` 4.5s 周期で呼吸
+- オーブ内テキスト 3 種の breathing animation (4 / 4.8 / 5.5s 異リズム)
+
+### 16-4. 中央オーブの時刻ベース挙動
+- `currentTime` state を 10 秒毎更新
+- `activeSignal`: 発走 10 分前 ≦ now ≦ 発走 +3 分の窓に入る signal
+- `focusedRace` あり → BET 詳細モード / なし → STANDBY モード
+- STANDBY 中も常時 Orb 表示 + 「次のレースまで N 分」表示
+- 中央オーブに「BET ¥XXX」を強調表示
+
+### 16-5. 投票モード 4 択
+| モード | 動作 |
+|---|---|
+| `manual` | 自動投票しない。手動投票のみ |
+| `bulk` | 受信即実行。当日全レースを一気購入 |
+| `first_only` | 最も早いレース 1 件のみ即実行 |
+| `sequential` | 各レース発走 5 分前に setTimeout 発射 (既存 BetScheduler) |
+
+- Settings に 4 つのカード式選択肢
+- Dashboard 上部に 4 ボタン横並び (即時切替・即時保存)
+- `prevBetModeRef` でモード切替と signals 変化を区別 (Droid 修正)
+- `inFlightRef` で bulk モード時の二重投票防止 (Droid 修正)
+- `first_only` ソートは時刻文字列を分換算で比較 (Droid 修正)
+
+### 16-6. BET 金額設定
+- Settings に 100〜50,000 円スライダー + 8 段プリセットボタン
+- `settings.bet_amount` で保存
+- Dashboard で `betAmount` を実投票額として使用 (UI 表示と DB 一致、Droid 修正)
+- `logBetHistory()` に `betAmount?` 引数追加
+
+### 16-7. 5 画面追加 / リライト
+| 画面 | 内容 |
+|---|---|
+| Login | Orb 中央 + ログインフォーム横並び。地方競馬 AI 自動投票システム |
+| Dashboard | 3 カラム HUD (signals 一覧 / 中央 Orb / 本日収支+EVENT LOG) |
+| Settings | 投票モード / BET 金額 / SPAT4 (主) / IPAT (任意) / 追い上げ |
+| RaceList | 当日 signals 全件カード表示。0 件時 "本日の配信はありません" |
+| RaceDetail | D-Logic 10 軸 + 大型 Orb + GANTZ NOTE (mock 暫定値) |
+| History | KPI 4 + 10 日棒グラフ + 一覧 (50 件 / page) |
+| Notifications | フィルタ + 5 種アイコン + 時系列 |
+
+### 16-8. 通知ストア (notification-store)
+- in-memory 200 件、subscribe pattern
+- 4 イベント源: `signal` / `fire` / `submitted` / `win` / `system` / `error`
+- 投票エラーの日本語化:
+  - 「残高 / balance」 → 「残高不足のため投票できませんでした」
+  - 「時間外 / 締切」 → 「投票締切時刻を過ぎています」
+  - 「login / 誤りがあります」 → 「ログインに失敗しました」
+  - 「取消」 → 「対象馬が出走取消のためスキップされました」
+
+### 16-9. 地方競馬専用化
+- Settings: SPAT4 を上位 + 緑グロー枠 + 「必須」/「地方競馬専用」強調
+- IPAT は下位 + opacity 0.85 + 「任意」
+- Login サブタイトル: 「地方競馬 AI 自動投票システム」
+- 「Supabase / D-Logic」 開発用語を画面から完全排除
+- 「GANTZ ENGINE」 / 「投票サイト」 等に統一
+
+### 16-10. Electron 仕様
+- タイトル: 「競馬GANTZ v1.00」
+- メニューバー (File/Edit/View/Window) 完全削除 (`Menu.setApplicationMenu(null)`)
+- アプリ製品名: 「競馬GANTZ」
+
+---
+
+## 17. Phase B 完了レポート — GANTZ 全体回収率 (2026-04-26)
+
+ユーザーが個人的に投票したかに関わらず、競馬GANTZ全体の本日回収率を
+表示する仕組み。100円固定計算で「もし全 strict signals に 100円ずつ
+BET したら」の回収率を、購入有無に関わらず可視化。
+
+### 17-1. スキーマ拡張
+**`migration 0005_bet_signals_outcome.sql`**:
+- `outcome_status TEXT` (pending / win / lose / cancelled / unknown)
+- `outcome_winner_number INTEGER`
+- `outcome_payout_per_100 INTEGER`
+- `outcome_updated_at TIMESTAMP WITH TIME ZONE`
+- `idx_bet_signals_outcome` 索引追加
+
+**`migration 0006_bet_history_replica_identity.sql`**:
+- `ALTER TABLE bet_history REPLICA IDENTITY FULL`
+- Realtime row-level filter (user_id=eq.X) を正しく機能させるため必須
+
+### 17-2. dlogic-agent 側スクリプト改修
+**`scripts/update_bet_results.py`** に追加:
+- `fetch_pending_gantz_signals()`: `source like 'gantz_%'` AND `outcome_status='pending'` AND
+  `signal_date >= now-30d` AND `bet_type=1` の signal を取得
+- `update_signal_outcome()`: `bet_signals.outcome_*` を PATCH
+- `update_gantz_outcomes()`: race_results 照合 + 全件更新
+- `main()` で既存の bet_history 更新後、続けて呼ぶ
+- results_cache のキー (YYYYMMDD-JO-NO 形式) から日付抽出して
+  cached_dates と比較 (Droid 修正、不要な再 fetch を防止)
+
+### 17-3. user-gui 側
+- `shared/types/database.types.ts`: `OutcomeStatus` 型 + `BetSignal` に
+  `outcome_*` 4 フィールド追加
+- `signals.ts` に `subscribeToSignalUpdates()` 追加 (UPDATE 購読)
+- `Dashboard.tsx`:
+  - `gantzRecovery` useMemo: 当日 `source like 'gantz_*'` の outcome 集計
+  - 100 円固定計算: `totalIn = decided.length * 100`
+  - 右上を 2 段表示: 主「GANTZ 本日回収率」+ 副「あなたの本日収支」
+  - Realtime UPDATE 購読 + 60 秒ポーリング fallback
+
+### 17-4. 動作確認
+4/24 (金) のテストデータ 7 件で全件 LOSE 判定動作確認済み:
+```
+GANTZ signal 1: LOSE race=20260424-浦和-1   bet=4 winner=5
+GANTZ signal 2: LOSE race=20260424-浦和-9   bet=3 winner=2
+GANTZ signal 3: LOSE race=20260424-金沢-2   bet=4 winner=2
+GANTZ signal 4: LOSE race=20260424-金沢-6   bet=1 winner=6
+GANTZ signal 5: LOSE race=20260424-金沢-7   bet=4 winner=8
+GANTZ signal 6: LOSE race=20260424-金沢-12  bet=2 winner=1
+GANTZ signal 7: LOSE race=20260424-名古屋-8 bet=4 winner=3
+```
+
+---
+
+## 18. Droid 第 2 回監査対応 (2026-04-26)
+
+Phase 6 + Phase B 実装後、factory-droid に再度包括監査を依頼。
+全件 Droid が直接コード修正 → TypeScript / Python 構文チェック PASS。
+
+### 18-1. 修正済み (15 件)
+
+| 重要度 | コード | 内容 |
+|---|---|---|
+| BLOCKER | B1 | `first_only` ソートを localeCompare → 分換算の数値比較に修正 |
+| BLOCKER | B2 | `inFlightRef` で `bulk` モード時の Realtime ハンドラと effect 同時実行による二重投票を防止 |
+| HIGH | H1 | `betAmount` を実投票額に統一 (UI 表示と DB の乖離解消)、`logBetHistory` に `betAmount?` 引数追加 |
+| HIGH | H2 | `Orb` の `useId()` でインスタンス毎にユニークな SVG `linearGradient` ID を生成し衝突防止 |
+| MEDIUM | M1 | `prevBetModeRef` でモード切替と signals 変化を区別、sequential モードで毎回スケジュール再構築する無駄を解消 |
+| MEDIUM | M2 | migration 0006 (`ALTER TABLE bet_history REPLICA IDENTITY FULL`) を追加・適用 |
+| MEDIUM | M3 | RaceList のデフォルト 'queued' バッジを非表示 (scheduleMap 不在のため) |
+| MEDIUM | M4 | `lastViewedNotifTs` state で通知未読カウント実装 |
+| LOW | L1 | `updateBetMode()` DB 保存失敗時に `setBetMode(prev)` でロールバック |
+| LOW | L2 | GzWindow バージョンを `import.meta.env.VITE_APP_VERSION ?? 'v2.6.0'` に env 化 |
+| LOW | L3 | History 収支グラフをデータ最大値で正規化 (除算ゼロ回避) |
+| LOW | L4 | RaceDetail エラー画面を `display:flex` に修正 (grid + flexDirection 共存問題) |
+| LOW | L5 | notification-store コメント修正 |
+| LOW | L6 | update_bet_results.py で race_id key から日付抽出 (race_date 列なし対応) |
+| LOW | L7 | `fetchTodaySignals` で JST 補正 (深夜 0-9 時の日付ズレ解消) |
+
+### 18-2. 残存課題 (本番稼働には影響しない)
+1. IPAT 認証情報 DB 平文保存 (`credentials_cipher`/`iv` 列未使用)
+2. RaceList のスケジュール状態表示 (`scheduleMap` グローバル化が必要)
+3. `gantzRecovery` の 100 円固定計算と管理者手動配信の推奨額の乖離
+4. `race-mapper.ts` の多数フィールドが暫定値 (D-Logic データ接続前)
+5. E2E テスト不在
+6. IPAT 単勝以外の馬券セレクタ実機未検証 (GANTZ は単勝のみのため非該当)
+
+---
+
+## 19. リリースタグ (2026-04-26)
+
+### `jinjinsansan/horse` `v1.1.0`
+- コミット: `a9ef871`
+- 内容: Phase 1〜6 + Phase B + Droid 監査全件対応
+- 旧 `v1.0.0` (`a569ee14`, electron-updater 導入時) は温存
+
+### `jinjinsansan/dlogic-agent` `horsebet-v1.0.0`
+- コミット: `8959366`
+- 内容: HorseBet 連携スクリプト一式
+  - `push_gantz_to_horse.py`
+  - `update_bet_results.py` (Phase 5 + Phase B)
+  - systemd unit 4 ファイル
+
+---
+
+## 20. 全体サマリ (2026-04-26 時点 / 明日 09:01 JST 本番稼働前夜)
+
+### 完成しているもの
+- ✅ GANTZ → Supabase 自動転送 (VPS 09:01 JST cron)
+- ✅ user-gui で Realtime 受信 → 投票モード 4 択
+  (manual / bulk / first_only / sequential)
+- ✅ 中央オーブの時刻ベース活性化 (発走 10 分前)
+- ✅ BET 金額カスタマイズ (100〜50,000円)
+- ✅ 個人投票結果反映 (12/18/23 時 cron)
+- ✅ GANTZ 全体回収率の本日表示
+- ✅ 履歴/収支ページ
+- ✅ 通知ログ
+- ✅ migration 0001〜0006 全適用済
+- ✅ Droid 第 1 回 + 第 2 回監査対応
+
+### 自動運用フロー
+```
+09:00 JST  GANTZ Telegram 配信 (anatou_post_strict.py)
+09:01 JST  → bet_signals に upsert (push_gantz_to_horse.py / dlogic-push-gantz.timer)
+            ↓ Supabase Realtime
+            user-gui 受信 → 投票モード分岐
+              · bulk: 即実行 (全件)
+              · first_only: 即実行 (最早 1 件)
+              · sequential: 5 分前まで予約
+              · manual: 何もしない
+発走 5 分前  → IPAT/SPAT4 自動投票 (Playwright) → bet_history (pending)
+12/18/23 時  → race_results 照合 (update_bet_results.py / dlogic-update-bet-results.timer)
+            → bet_history.bet_result 更新 (個人)
+            → bet_signals.outcome_* 更新 (GANTZ 全体)
+            → user-gui の右上回収率が Realtime で再計算
+```
+
+### 残作業 (jin さん側)
+1. **明日 09:01 JST のリアル動作観察** (user-gui 起動状態維持)
+2. **Phase 2 実機ライブテスト** (PHASE2_LIVE_TEST.md 参照、IPAT/SPAT4 100円×1点)
+3. 何か問題が出たら git tag `v1.1.x` パッチで対応
