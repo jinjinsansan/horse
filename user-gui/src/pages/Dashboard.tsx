@@ -49,6 +49,28 @@ function describeSubscription(status: 'trial' | 'active' | 'expired' | 'suspende
   }
 }
 
+/**
+ * GANTZ note ("GANTZ strict | 5番ヒロイン | 6人気 | 発走15:25 | 一致3/4(D+I+V)")
+ * から構造化メタ情報を抽出する。
+ */
+function parseGantzNote(note: string | null): {
+  horseName: string | null;
+  popularity: string | null;
+  consensus: string | null;
+  consensusEngines: string | null;
+} {
+  if (!note) return { horseName: null, popularity: null, consensus: null, consensusEngines: null };
+  const horseMatch = note.match(/\d+番([^\s|]+)/);
+  const popMatch = note.match(/(\d+)人気/);
+  const consMatch = note.match(/一致(\d+)\/4(?:\(([^)]+)\))?/);
+  return {
+    horseName: horseMatch ? horseMatch[1] : null,
+    popularity: popMatch ? popMatch[1] : null,
+    consensus: consMatch ? `${consMatch[1]}/4` : null,
+    consensusEngines: consMatch && consMatch[2] ? consMatch[2] : null,
+  };
+}
+
 function describeScheduleStatus(item: ScheduledItem | undefined): { label: string; cls: string } | null {
   if (!item) return null;
   switch (item.status) {
@@ -492,26 +514,80 @@ export default function Dashboard() {
           <section className="detail-card">
             <div className="detail-head">
               <div>
-                <p className="label">レース情報</p>
+                <p className="label">RACE / TARGET</p>
                 <h2>{selectedSignal.jo_name} {selectedSignal.race_no}R</h2>
-                <p className="muted">{selectedSignal.bet_type_name} / 推奨 ¥{selectedSignal.suggested_amount.toLocaleString()}</p>
+                <p className="muted">
+                  {selectedSignal.race_type} · {selectedSignal.bet_type_name} · 推奨 ¥{selectedSignal.suggested_amount.toLocaleString()}
+                </p>
               </div>
               <div className={`status ${selectedSignal.status}`}>
                 {selectedSignal.status}
               </div>
             </div>
+
+            {(() => {
+              const meta = parseGantzNote(selectedSignal.note);
+              const sched = scheduleMap.get(selectedSignal.id);
+              const schedDesc = describeScheduleStatus(sched);
+              const targetHorse = selectedSignal.kaime_data[0] ?? '?';
+              return (
+                <div className="target-hud">
+                  <span className="marquee-l">データが導く勝利</span>
+                  <span className="marquee-r">未来を予測せよ</span>
+
+                  <div className="hud-cell cell-tl">
+                    <p className="hud-label">VENUE</p>
+                    <p className="hud-value">{selectedSignal.jo_name}</p>
+                    <p className="hud-sub">{selectedSignal.race_no}R · {selectedSignal.race_type}</p>
+                  </div>
+
+                  <div className="hud-cell cell-tr">
+                    <p className="hud-label">START TIME</p>
+                    <p className="hud-value">{selectedSignal.start_time ?? '—:—'}</p>
+                    <p className="hud-sub">JST</p>
+                  </div>
+
+                  <div className="target-center">
+                    <div className="target-core">
+                      <p className="race">{selectedSignal.bet_type_name} / TARGET</p>
+                      <p className="horse-num">{targetHorse}</p>
+                      {meta.horseName && <p className="horse-name">{meta.horseName}</p>}
+                      <p className="bet-meta">¥{selectedSignal.suggested_amount.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="hud-cell cell-ml">
+                    <p className="hud-label">POPULARITY</p>
+                    <p className="hud-value">{meta.popularity ?? '—'}</p>
+                    <p className="hud-sub">{meta.popularity ? '人気' : 'unknown'}</p>
+                  </div>
+
+                  <div className="hud-cell cell-mr">
+                    <p className="hud-label">AI CONSENSUS</p>
+                    <p className="hud-value">{meta.consensus ?? '—'}</p>
+                    <p className="hud-sub">{meta.consensusEngines ?? 'engines'}</p>
+                  </div>
+
+                  <div className="hud-cell cell-bl">
+                    <p className="hud-label">SOURCE</p>
+                    <p className="hud-value">{selectedSignal.source.toUpperCase().replace('GANTZ_', '')}</p>
+                    <p className="hud-sub">SIGNAL #{selectedSignal.id}</p>
+                  </div>
+
+                  <div className="hud-cell cell-br">
+                    <p className="hud-label">EXEC STATUS</p>
+                    <p className="hud-value">{schedDesc?.label ?? 'STANDBY'}</p>
+                    <p className="hud-sub">{autoBetEnabled ? 'AUTO ARMED' : 'MANUAL ONLY'}</p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {selectedSignal.note && (
               <div className="note">
                 <p>{selectedSignal.note}</p>
               </div>
             )}
-            <div className="kaime-grid">
-              {selectedSignal.kaime_data.map((item, index) => (
-                <span key={`${item}-${index}`} className="kaime">
-                  {item}
-                </span>
-              ))}
-            </div>
             {(() => {
               const sched = scheduleMap.get(selectedSignal.id);
               const isMissed = missedSignals.some((s) => s.id === selectedSignal.id);

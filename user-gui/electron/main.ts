@@ -1,9 +1,12 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import fs from 'node:fs';
 import path from 'node:path';
 import { executeBet } from './services/bet-executor';
 import { fetchJraOdds } from './services/odds-fetcher';
+
+// File / Edit / View / Window メニューを完全に消す
+Menu.setApplicationMenu(null);
 
 const isDev = process.env.NODE_ENV === 'development';
 const getPlaywrightCachePath = () => {
