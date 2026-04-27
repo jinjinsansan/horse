@@ -102,8 +102,9 @@ export class IpatVoter {
   private selectedBetTypeNo = 0;
   private selectedMethod = 0;
 
-  // 取消馬番
+  // 取消馬番（レース毎に再取得。lastCanceledRaceKey が変わったら再フェッチ）
   private canceledUmabans: number[] = [];
+  private canceledUmabansRaceKey = '';
 
   // 認証情報
   private credentials: IpatCredentials | null = null;
@@ -337,10 +338,17 @@ export class IpatVoter {
       throw new Error('IPATログインに失敗しました。認証情報を確認してください。');
     }
 
-    // 重要なお知らせダイアログがあればOKをクリック
+    // 重要なお知らせダイアログがあればOKをクリック（ダイアログ内に限定）
     if (bodyText?.includes('重要なお知らせ')) {
       this.log('Clicking OK on important notice dialog');
-      const okButton = page.locator('button:has-text("OK")');
+      // AngularJS の ng-show/ng-if ベースのダイアログ内OKボタンに絞る
+      const okButton = page.locator([
+        'div:has-text("重要なお知らせ") button:has-text("OK")',
+        '[ng-show*="notice"] button:has-text("OK")',
+        '[ng-if*="notice"] button:has-text("OK")',
+        '[class*="notice"] button:has-text("OK")',
+        '[class*="dialog"] button:has-text("OK")',
+      ].join(', ')).first();
       if (await okButton.count()) {
         await okButton.click();
         await page.waitForLoadState('networkidle');
@@ -422,6 +430,7 @@ export class IpatVoter {
     // レース番号ボタンをクリック
     const raceButton = page.locator(`button[onclick*="vm.selectRace("]:has-text("${betInfo.raceNo}R")`);
     if (!(await raceButton.count())) {
+      await this.captureScreenshot(`ipat-race-not-found-${betInfo.raceNo}`);
       throw new Error(`レース${betInfo.raceNo}Rが見つかりません`);
     }
 
@@ -478,10 +487,12 @@ export class IpatVoter {
       this.selectedMethod = betInfo.method;
     }
 
-    // 取消馬番の取得（初回のみ）
-    if (this.canceledUmabans.length === 0) {
+    // 取消馬番の取得（レース毎に再取得。複数レース連続投票で汚染しないよう race key で管理）
+    const canceledRaceKey = `${betInfo.joName}:${betInfo.raceNo}`;
+    if (canceledRaceKey !== this.canceledUmabansRaceKey) {
       this.canceledUmabans = await this.getCanceledUmabans();
-      this.log('Canceled umabans:', this.canceledUmabans);
+      this.canceledUmabansRaceKey = canceledRaceKey;
+      this.log(`Canceled umabans for ${canceledRaceKey}:`, this.canceledUmabans);
     }
 
     // 単勝・複勝は専用パス（GANTZ メイン経路）
@@ -520,10 +531,21 @@ export class IpatVoter {
     await page.waitForTimeout(500);
     const setButton = page.locator('button[onclick*="vm.onSet("]:has-text("セット")');
     if (!(await setButton.isDisabled())) {
-      this.log('Clicking セット button');
+      // ❼ セット前の買い目リスト行数を記録してセット後に増加確認
+      const kaimeListRows = page.locator('[ng-repeat*="kaime"], .ipat-kaime-row, #select-list-kaime tbody tr');
+      const rowsBefore = await kaimeListRows.count();
+      this.log('Clicking セット button (rows before:', rowsBefore, ')');
       await setButton.click();
       this.currentKaimeNo++;
-      await page.waitForTimeout(1000);
+      // AngularJS が DOM を更新するまで待機
+      await page.waitForTimeout(1500);
+      const rowsAfter = await kaimeListRows.count();
+      if (rowsAfter > rowsBefore) {
+        this.log(`Set confirmed: kaime list ${rowsBefore} → ${rowsAfter} rows`);
+      } else {
+        this.log(`Warning: kaime list row count unchanged after set (${rowsBefore}). May have failed.`);
+        await this.captureScreenshot('ipat-set-no-increment');
+      }
     }
   }
 
@@ -567,16 +589,23 @@ export class IpatVoter {
 
     this.log(`Clicking umaban button (umaban=${targetUmaban})`);
     await button.click();
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(150);
 
     // 「セット」ボタンをクリック
     await page.waitForTimeout(500);
     const setButton = page.locator('button[onclick*="vm.onSet("]:has-text("セット")');
     if (!(await setButton.isDisabled())) {
-      this.log('Clicking セット button');
+      const kaimeListRows = page.locator('[ng-repeat*="kaime"], .ipat-kaime-row, #select-list-kaime tbody tr');
+      const rowsBefore = await kaimeListRows.count();
+      this.log('Clicking セット button (rows before:', rowsBefore, ')');
       await setButton.click();
       this.currentKaimeNo++;
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
+      const rowsAfter = await kaimeListRows.count();
+      if (rowsAfter <= rowsBefore) {
+        this.log('Warning: kaime list row count unchanged after set. May have failed.');
+        await this.captureScreenshot('ipat-set-no-increment-tanfuku');
+      }
     }
   }
 
@@ -650,13 +679,30 @@ export class IpatVoter {
       const idName = idNames[Math.min(i + 1, idNames.length - 1)];
       if (!idName) continue;
 
-      const buttonId = `${idName}${umaban}`;
-      const button = page.locator(`#${buttonId}`);
+      const primaryId = `${idName}${umaban}`;
+      let button = page.locator(`#${primaryId}`);
 
-      if (await button.count()) {
-        await button.click();
-        await page.waitForTimeout(50); // 馬番選択間隔
+      if (!(await button.count())) {
+        // ❶ ワイド(5): umaren- が見つからない場合 wide- 形式をフォールバック試行
+        if (betInfo.betTypeNo === 5) {
+          const wideId = `select-list-wide-${i + 1}-${umaban}`;
+          const wideBtn = page.locator(`#${wideId}`);
+          if (await wideBtn.count()) {
+            this.log(`[ワイド fallback] using wide selector: ${wideId}`);
+            button = wideBtn;
+          } else {
+            await this.captureScreenshot(`ipat-wide-btn-miss-${umaban}`);
+            this.log(`Warning: ワイド selector not found for umaban ${umaban} (tried ${primaryId} and ${wideId})`);
+            continue;
+          }
+        } else {
+          this.log(`Warning: button #${primaryId} not found, skipping umaban ${umaban}`);
+          continue;
+        }
       }
+
+      await button.click();
+      await page.waitForTimeout(150); // ❻ AngularJS change detection 完了待ち (50ms→150ms)
     }
   }
 
@@ -701,6 +747,7 @@ export class IpatVoter {
     // 「投票内容を確認」ボタンをクリック
     const confirmButton = page.locator('button[ng-click*="vm.confirmKaime()"]');
     if (!(await confirmButton.count())) {
+      await this.captureScreenshot('ipat-confirm-btn-not-found');
       throw new Error('投票内容確認ボタンが見つかりません');
     }
 
@@ -712,14 +759,30 @@ export class IpatVoter {
       throw new Error('Credentials not set');
     }
 
-    const pinInput = page.locator('input[name="暗証番号"], input[ng-model*="pin"]').first();
+    // ❺ 暗証番号 selector: 複数パターンでフォールトトレラントに
+    // 実IPAT確認済みの name 属性が判明したら先頭に追加すること
+    const pinInput = page.locator([
+      'input[name="暗証番号"]',         // 日本語 name (旧版IPAT)
+      'input[name="ansho"]',             // 英字 name 候補
+      'input[name="pars_cd"]',           // ログインフォームと同じ可能性
+      'input[name="PARS_CD"]',
+      'input[ng-model*="pin"]',          // AngularJS バインディング
+      'input[ng-model*="ansho"]',
+      'input[ng-model*="pars"]',
+      'input[type="password"]',          // 最終フォールバック: type=password
+    ].join(', ')).first();
     if (await pinInput.count()) {
       await pinInput.fill(this.credentials.pin);
+      this.log('PIN input filled');
+    } else {
+      this.log('Warning: PIN input not found — skipping (may cause vote failure)');
+      await this.captureScreenshot('ipat-pin-not-found');
     }
 
     // 「この内容で投票」ボタンをクリック
     const voteButton = page.locator('button[ng-click*="vm.vote()"]');
     if (!(await voteButton.count())) {
+      await this.captureScreenshot('ipat-vote-btn-not-found');
       throw new Error('投票実行ボタンが見つかりません');
     }
 
@@ -727,9 +790,11 @@ export class IpatVoter {
     await voteButton.click();
     await page.waitForLoadState('networkidle');
 
-    // 投票完了確認
+    // ❿ 投票完了確認（複数表現に対応）
     const bodyText = await page.locator('body').textContent();
-    if (!bodyText?.includes('投票が完了しました')) {
+    const completionTexts = ['投票が完了しました', '投票完了', '投票受付', '正常に処理しました'];
+    if (!completionTexts.some((t) => bodyText?.includes(t))) {
+      await this.captureScreenshot('ipat-vote-no-completion');
       throw new Error('投票完了メッセージが見つかりません');
     }
 
@@ -784,14 +849,20 @@ export class IpatVoter {
   /**
    * ヘルパー関数：馬番ボタンの ID 接頭辞を取得（連系馬券用）
    *
-   * 検証状況:
-   * - 単勝(1) / 複勝(2): inputKaimeTanFuku() 経由で findUmabanButton が
-   *   フォールバック selector を持つため、この prefix を直接使うパスは無効。
-   * - 連系(3-8): 実 IPAT HTML での selector 検証は **未実施**。
-   *   ライブテストで動作確認のうえ、必要に応じて prefix を実値に直すこと。
-   *   失敗時は selectUmabans からのスクリーンショット出力で原因特定可能。
+   * 検証状況 (2026-04-27):
+   * - 単勝(1) / 複勝(2): inputKaimeTanFuku() 経由。この関数は使わない。
+   * - 馬連(4): select-list-umaren-{1,2}- を使用。実機未確認。
+   * - ワイド(5): 馬連と同 selector を第一候補とし、selectUmabans() 内で
+   *   select-list-wide-{1,2}- へのフォールバックを実装。実機確認で更新すること。
+   * - 馬単(6): select-list-umatan-{1,2}-。実機未確認。
+   * - 3連複(7): select-list-sanrenpuku-{1,2,3}-。実機未確認。
+   * - 3連単(8): select-list-sanrentan-{1,2,3}-。実機未確認。
+   *
+   * method (101=ながし / 201=BOX / 301=フォーメーション) による selector 違い:
+   * - 現状は方式によらず同一 prefix を使用（フォーメーション基準）。
+   * - BOX(201) は式別フォームの列構成が異なる可能性あり。実機確認後に分岐を追加すること。
    */
-  private getIdNames(betTypeNo: number, _method: number): string[] {
+  private getIdNames(betTypeNo: number, method: number): string[] {
     const names: string[] = [''];
 
     switch (betTypeNo) {
@@ -803,7 +874,9 @@ export class IpatVoter {
         names.push('select-list-waku-1-', 'select-list-waku-2-');
         break;
       case 4: // 馬連
-      case 5: // ワイド
+        names.push('select-list-umaren-1-', 'select-list-umaren-2-');
+        break;
+      case 5: // ワイド — 第一候補: umaren と同形式。フォールバックは selectUmabans() で処理
         names.push('select-list-umaren-1-', 'select-list-umaren-2-');
         break;
       case 6: // 馬単
@@ -815,6 +888,11 @@ export class IpatVoter {
       case 8: // 3連単
         names.push('select-list-sanrentan-1-', 'select-list-sanrentan-2-', 'select-list-sanrentan-3-');
         break;
+    }
+
+    // method が 201(BOX) の場合は将来的に selector を分岐する想定
+    if (method === 201) {
+      this.log(`[getIdNames] BOX(201) selector: currently using same prefix as フォーメーション. Verify on real IPAT.`);
     }
 
     return names;

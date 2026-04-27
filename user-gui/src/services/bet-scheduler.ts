@@ -4,7 +4,7 @@
  * GANTZ ブリッジ等から Supabase に投入された bet_signals を、
  * レース発走時刻ベースで自動投票するスケジューラ。
  *
- * - レース発走 LEAD_MINUTES 分前に発射（デフォルト 5 分）
+ * - レース発走 LEAD_MINUTES 分前に発射（デフォルト 10 分）
  * - signal.start_time が未指定の signal は即時実行（手動配信互換）
  * - すでに発走時刻を過ぎたシグナルは即時実行（遅延受信のリカバリ）
  * - 同一 signal_id を二重発射しない（in-memory + bet_history チェック）
@@ -40,7 +40,7 @@ export interface BetSchedulerOptions {
   onChange?: (items: ReadonlyMap<number, ScheduledItem>) => void;
 }
 
-const DEFAULT_LEAD_MINUTES = 5;
+const DEFAULT_LEAD_MINUTES = 10;
 const DEFAULT_GRACE_SECONDS_AFTER_START = 60;
 
 /**

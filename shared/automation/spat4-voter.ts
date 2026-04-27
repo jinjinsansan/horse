@@ -246,43 +246,33 @@ export class Spat4Voter {
     
     this.log('Handling P001S page');
     
-    // 日付確認
-    const dateSpan = await page.locator('span.date').first();
-    const dateText = await dateSpan.textContent();
+    // 日付確認 (情報取得のみ。失敗しても続行)
+    const dateText = await page.locator('span.date').first().textContent({ timeout: 5000 }).catch(() => null);
     this.log('Date on page:', dateText);
     
-    if (!dateText) {
-      throw new Error('日付が取得できません');
-    }
-    
-    // 日本語形式の日付を解析（例: "2025年11月25日"）
-    const dateMatch = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-    if (!dateMatch) {
-      this.log('Could not parse date, skipping date check');
-    } else {
-      const pageYear = parseInt(dateMatch[1], 10);
-      const pageMonth = parseInt(dateMatch[2], 10);
-      const pageDay = parseInt(dateMatch[3], 10);
-      const pageDate = new Date(pageYear, pageMonth - 1, pageDay);
-      
-      const targetDate = new Date(this.betInfoList[0].kaisaiDate);
-      
-      this.log('Parsed dates:', {
-        page: pageDate.toISOString().split('T')[0],
-        target: targetDate.toISOString().split('T')[0],
-      });
-      
-      if (pageDate.toDateString() !== targetDate.toDateString()) {
-        this.log('Date mismatch, but continuing (may be test data)');
-        // 元のコードでは日付が違う場合にエラーを投げていたが、
-        // テストデータの場合は無視する
-        // throw new Error('日付が違います');
+    if (dateText) {
+      const dateMatch = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+      if (dateMatch) {
+        const pageDate = new Date(
+          parseInt(dateMatch[1], 10),
+          parseInt(dateMatch[2], 10) - 1,
+          parseInt(dateMatch[3], 10),
+        );
+        const targetDate = new Date(this.betInfoList[0].kaisaiDate);
+        this.log('Parsed dates:', {
+          page: pageDate.toISOString().split('T')[0],
+          target: targetDate.toISOString().split('T')[0],
+        });
+        if (pageDate.toDateString() !== targetDate.toDateString()) {
+          this.log('Date mismatch, but continuing');
+        }
       }
+    } else {
+      this.log('span.date not found — skipping date check');
     }
     
-    // 競馬場確認
-    const raceNameSpan = await page.locator('span.race_name').first();
-    const raceNameText = await raceNameSpan.textContent();
+    // 競馬場確認 (失敗しても続行)
+    const raceNameText = await page.locator('span.race_name').first().textContent({ timeout: 5000 }).catch(() => null);
     this.log('Race name on page:', raceNameText?.trim());
     
     const targetJoName = this.betInfoList[0].joName;
@@ -303,7 +293,7 @@ export class Spat4Voter {
     
     if (!(await shussohyoTable.count())) {
       this.log('出走表 table not found on page');
-      const bodyText = await page.locator('body').textContent();
+      const bodyText = await page.locator('body').textContent({ timeout: 5000 }).catch(() => '');
       this.log('Page body preview:', bodyText?.substring(0, 500));
       throw new Error('出走表が見つかりません。本日の開催がない可能性があります。');
     }
@@ -354,6 +344,9 @@ export class Spat4Voter {
     const page = this.ensurePage();
     
     this.log('Handling P120S odds page');
+    
+    // フレームセットの読み込みを待つ (networkidle だけでは不十分な場合がある)
+    await page.waitForTimeout(1500);
     
     // 取消馬番を取得（初回のみ）
     if (this.canceledUmabans === null) {
@@ -413,7 +406,7 @@ export class Spat4Voter {
       const frameUrl = frame.url();
       
       // P122Sフレームまたは式別テキストを含むフレームを探す
-      const bodyText = await frame.locator('body').textContent().catch(() => '');
+      const bodyText = await frame.locator('body').textContent({ timeout: 5000 }).catch(() => '');
       
       if (
         !frameUrl.includes('HANDLERR=P122S') &&
@@ -641,7 +634,7 @@ export class Spat4Voter {
               
               if (!(await confirmBtn.count())) {
                 this.log('投票内容確認へ button not found, checking page content');
-                const bodyText = await frame.locator('body').textContent();
+                const bodyText = await frame.locator('body').textContent({ timeout: 5000 }).catch(() => '');
                 this.log('Frame body preview:', bodyText?.substring(0, 300));
                 throw new Error('投票内容確認へ button not found');
               }
@@ -716,7 +709,7 @@ export class Spat4Voter {
         const url = frame.url();
         if (url.includes('P902S') || url.includes('P901')) {
           this.log(`Checking ${url.includes('P902S') ? 'P902S' : 'P901'} frame content:`);
-          const content = await frame.locator('body').textContent();
+          const content = await frame.locator('body').textContent({ timeout: 5000 }).catch(() => '');
           this.log('Frame content:', content?.substring(0, 500));
         }
       }
@@ -791,8 +784,8 @@ export class Spat4Voter {
     
     // エラーチェック
     const frameContent = p203Frame 
-      ? await p203Frame.locator('body').textContent() 
-      : await p202Frame.locator('body').textContent();
+      ? await p203Frame.locator('body').textContent({ timeout: 5000 }).catch(() => '') 
+      : await p202Frame.locator('body').textContent({ timeout: 5000 }).catch(() => '');
     
     if (frameContent?.includes('購入限度額を超えています')) {
       throw new Error('購入限度額を超えています');
@@ -831,7 +824,7 @@ export class Spat4Voter {
         continue;
       }
       
-      const bodyText = await frame.locator('body').textContent();
+      const bodyText = await frame.locator('body').textContent({ timeout: 5000 }).catch(() => '');
       if (!bodyText?.includes('単勝式・複勝式オッズ')) {
         continue;
       }

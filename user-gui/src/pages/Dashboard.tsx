@@ -32,6 +32,7 @@ type MinimalSignal = {
   jo_name: string;
   race_no: number;
   bet_type_name: string;
+  method: number;
   kaime_data: string[];
   suggested_amount: number;
 };
@@ -239,7 +240,8 @@ export default function Dashboard() {
     const gantzToday = signals.filter(
       (s) =>
         s.signal_date === today &&
-        (s.source === 'gantz_strict' || s.source === 'gantz_loose'),
+        typeof s.source === 'string' &&
+        s.source.startsWith('gantz_'),
     );
     const decided = gantzToday.filter(
       (s) => s.outcome_status === 'win' || s.outcome_status === 'lose',
@@ -300,6 +302,7 @@ export default function Dashboard() {
         jo_name: target.jo_name,
         race_no: target.race_no,
         bet_type_name: target.bet_type_name,
+        method: target.method,
         kaime_data: target.kaime_data,
         suggested_amount: betAmount,
       };
@@ -322,13 +325,13 @@ export default function Dashboard() {
           }
           submittedIdsRef.current.add(target.id);
           if (oiageRecord?.is_active) {
-            await advanceOiage(oiageRecord, target.suggested_amount);
+            await advanceOiage(oiageRecord, betAmount);
             const { data: oiage } = await fetchActiveOiage(userId, 8);
             setOiageRecord(oiage ?? null);
           }
           notificationStore.push({
             type: 'submitted',
-            message: `${target.jo_name} ${target.race_no}R ${target.bet_type_name} ${target.kaime_data.join(',')}番 / ¥${target.suggested_amount} 投票完了`,
+            message: `${target.jo_name} ${target.race_no}R ${target.bet_type_name} ${target.kaime_data.join(',')}番 / ¥${betAmount.toLocaleString()} 投票完了`,
             severity: 'success',
           });
         } else {

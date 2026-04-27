@@ -2,7 +2,7 @@ export type RaceType = 'JRA' | 'NAR';
 export type BetResult = 'pending' | 'win' | 'lose' | 'cancelled';
 export type SignalStatus = 'active' | 'cancelled' | 'completed';
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'suspended';
-export type SignalSource = 'manual' | 'gantz_strict' | 'gantz_loose' | 'other';
+export type SignalSource = 'manual' | 'gantz_strict' | 'gantz_loose' | 'other' | string;
 export type OutcomeStatus = 'pending' | 'win' | 'lose' | 'cancelled' | 'unknown';
 
 export interface BetSignal {

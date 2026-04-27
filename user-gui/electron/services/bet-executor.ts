@@ -16,6 +16,7 @@ type MinimalBetSignal = {
   jo_name: string;
   race_no: number;
   bet_type_name: string;
+  method: number;    // 方式コード (0=不要, 101=ながし, 201=ボックス, 301=フォーメーション)
   kaime_data: string[];
   suggested_amount: number;
 };
@@ -66,6 +67,14 @@ const getScreenshotDir = (() => {
   };
 })();
 
+// SPAT4はChromium persistent profileを1つ共有するため、同時実行するとプロファイルロック競合が発生する。
+// シリアライズ用ミューテックス: 前のSPAT4投票が完了してから次を開始する。
+let spat4QueueTail: Promise<void> = Promise.resolve();
+
+// IPATも同一アカウントへの並列ログインを避けるため直列化する。
+// (L3 JRA同レースで F5複勝+U2馬連×3+S1三連複 が同時発火するケースに対応)
+let ipatQueueTail: Promise<void> = Promise.resolve();
+
 function normalizeResult<T extends VoteOutcome>(result: T): T {
   if (result && result.detail && !result.details) {
     return { ...result, details: result.detail };
@@ -107,8 +116,10 @@ export async function executeBet(payload: BetExecutionPayload) {
       // kaisaiDateをDateオブジェクトに変換
       const kaisaiDate = new Date(signal.signal_date);
       
-      // 単勝(1)・複勝(2)は方式不要。それ以外はフォーメーション(301)をデフォルト
-      const method = betTypeNo === 1 || betTypeNo === 2 ? 0 : 301;
+      // signal.method を優先使用。未指定またはゼロの場合は式別ごとのデフォルトにフォールバック
+      const method = signal.method !== undefined && signal.method !== 0
+        ? signal.method
+        : (betTypeNo === 1 || betTypeNo === 2 ? 0 : 301);
 
       const request: IpatBetRequest = {
         kaisaiDate,
@@ -121,12 +132,26 @@ export async function executeBet(payload: BetExecutionPayload) {
         amount: signal.suggested_amount,
       };
       
-      const result = await executeIpatVote(payload.credentials.ipat, [request], {
-        headless,
-        screenshotDir: getScreenshotDir(),
-      });
-      console.log('[bet-executor] IPAT result:', result);
-      return normalizeResult(result);
+      // ❽ IPAT も直列化（同一アカウントへの並列ログイン防止）
+      let releaseIpatLock!: () => void;
+      const myIpatTurn = new Promise<void>((resolve) => { releaseIpatLock = resolve; });
+      const prevIpatTail = ipatQueueTail;
+      ipatQueueTail = myIpatTurn;
+      try {
+        await prevIpatTail;
+      } catch { /* 前の投票失敗でも続行 */ }
+
+      let ipatResult: Awaited<ReturnType<typeof executeIpatVote>>;
+      try {
+        ipatResult = await executeIpatVote(payload.credentials.ipat, [request], {
+          headless,
+          screenshotDir: getScreenshotDir(),
+        });
+      } finally {
+        releaseIpatLock();
+      }
+      console.log('[bet-executor] IPAT result:', ipatResult);
+      return normalizeResult(ipatResult);
     }
 
     if (!payload.credentials.spat4) {
@@ -154,12 +179,24 @@ export async function executeBet(payload: BetExecutionPayload) {
       return { success: false, message: 'SPAT4暗証番号が未入力です' };
     }
 
+    // 同一 profileDir への並列アクセスを防ぐためシリアライズ
+    let releaseSpat4Lock!: () => void;
+    const myTurn = new Promise<void>((resolve) => { releaseSpat4Lock = resolve; });
+    const prevTail = spat4QueueTail;
+    spat4QueueTail = myTurn;
+
+    try {
+      await prevTail; // 前の投票が終わるまで待機
+    } catch {
+      // 前の投票が失敗しても自分は続行
+    }
+
     const voter = new Spat4Voter({ profileDir, screenshotDir: getScreenshotDir() });
     try {
       await voter.initialize(headless);
       await voter.login({ memberNumber, memberId, password });
       
-      // 買い目データを配列に変換（現在は1つの買い目のみサポート）
+      // 買い目データを配列に変換
       const kaimeNumbers = signal.kaime_data.map((k: string) => {
         const num = parseInt(k, 10);
         return isNaN(num) ? 0 : num;
@@ -179,6 +216,7 @@ export async function executeBet(payload: BetExecutionPayload) {
       return normalizeResult(result);
     } finally {
       await voter.close();
+      releaseSpat4Lock(); // 次の待機中投票を解放
     }
   } catch (error) {
     console.error('[bet-executor] Error:', error);
