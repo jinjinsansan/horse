@@ -112,6 +112,124 @@ export class Spat4Voter {
   }
 
   /**
+   * 「利用者IDが初期設定」お知らせページが表示されている場合に「投票へすすむ」をクリックして通過する。
+   * ログイン直後と handleP001SPage 冒頭の両方から呼ばれる。
+   */
+  private async dismissInitialNoticeIfPresent(maxIterations: number = 3): Promise<void> {
+    const page = this.ensurePage();
+
+    // 複数の通知ページが連続表示される可能性があるためループで処理
+    for (let iter = 0; iter < maxIterations; iter++) {
+      // 各 frame の load 完了を待ってから探索 (textContent が空で返ってくる対策)
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
+      await page.waitForTimeout(800); // frame content fully render 待ち
+
+      // メインフレームと全サブフレームを対象に各種通知を探す
+      const framesToCheck = [page.mainFrame(), ...page.frames().filter((f) => f !== page.mainFrame())];
+      let noticeFound = false;
+
+      for (const frame of framesToCheck) {
+        // body.textContent() は frame load タイミングで空が返るバグあり
+        // → frame.content() で HTML 全体を取得して検出
+        const html = await frame.content().catch(() => '');
+        const bodyText = html.length > 0 ? html : await frame.locator('body').textContent({ timeout: 3000 }).catch(() => '') || '';
+
+        // 通知ページの判定キーワード — 「投票へすすむ」または特定通知文言
+        const isNoticePage =
+          bodyText.includes('利用者IDが初期設定') ||
+          bodyText.includes('メールアドレスの認証システム') ||
+          bodyText.includes('メールアドレス登録のお願い') ||
+          bodyText.includes('重要なお知らせ');
+
+        // 「投票へすすむ」だけだと race_name 等を含む正常 P001S が誤判定される。
+        // 通知特有の文言が無く、かつ既に出走表 table が見えていれば notice ではない。
+        const hasShussohyoTable = await frame.locator('table[summary="出走表"]').count() > 0;
+        if (!isNoticePage && (!bodyText.includes('投票へすすむ') || hasShussohyoTable)) {
+          continue;
+        }
+        noticeFound = true;
+        this.log(`[dismissNotice iter=${iter}] Notice detected in frame:`, frame.url(), '— matched:', {
+          shoki: bodyText?.includes('利用者IDが初期設定'),
+          email: bodyText?.includes('メールアドレスの認証システム'),
+          touhyou: bodyText?.includes('投票へすすむ'),
+        });
+
+        // 「次回からこのお知らせを表示しない」チェックボックスがあればチェック
+        // (毎回出るのを止めるため、idempotent に check_or_skip)
+        const skipCheckboxes = await frame.locator('input[type="checkbox"]').all();
+        for (const cb of skipCheckboxes) {
+          try {
+            const isChecked = await cb.isChecked().catch(() => true);
+            if (!isChecked) {
+              await cb.check({ timeout: 2000 });
+              this.log('[dismissNotice] Checked "次回から表示しない"');
+            }
+          } catch { /* skip */ }
+        }
+
+        // <button>, <input type="button">, <input type="submit">, <a> を全て探索
+        const candidates = await frame.locator('button, input[type="button"], input[type="submit"], a').all();
+        const infos = await Promise.all(candidates.map(async (el) => ({
+          el,
+          txt: (await el.textContent().catch(() => '') ?? '').trim(),
+          val: (await el.getAttribute('value').catch(() => '') ?? '').trim(),
+        })));
+        this.log(`[dismissNotice iter=${iter}] Clickable:`,
+          infos.map((i) => i.txt || i.val).filter(Boolean).slice(0, 20));
+
+        // 「投票へすすむ」を最優先、次に「投票」、最後に「OK」「すすむ」「次へ」
+        let target: typeof infos[0] | null = null;
+        for (const item of infos) {
+          if (item.txt === '投票へすすむ' || item.val === '投票へすすむ') { target = item; break; }
+        }
+        if (!target) {
+          for (const item of infos) {
+            if (item.txt.includes('投票へすすむ') || item.val.includes('投票へすすむ')) { target = item; break; }
+          }
+        }
+        if (!target) {
+          for (const item of infos) {
+            if (item.txt.includes('投票') || item.val.includes('投票')) { target = item; break; }
+          }
+        }
+
+        if (!target) {
+          this.log('[dismissNotice] Warning: no proceed button found');
+          await this.captureScreenshot('spat4-notice-no-proceed-btn');
+          break; // この frame では無理 — 次の iter で再試行
+        }
+
+        const urlBefore = page.url();
+        this.log('[dismissNotice] Clicking:', target.txt || target.val, '— urlBefore:', urlBefore);
+        await target.el.click({ timeout: 5000 });
+
+        // URL 変化 or P001S コンテンツ表示を待機
+        await Promise.race([
+          page.waitForFunction(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ((before: string) => (globalThis as any).location.href !== before) as any,
+            urlBefore,
+            { timeout: 8000 }
+          ),
+          page.locator('span.race_name, table[summary="出走表"]').waitFor({ state: 'visible', timeout: 8000 }),
+        ]).catch(() => {
+          this.log('[dismissNotice] No URL change or race content after click');
+        });
+
+        await page.waitForLoadState('networkidle').catch(() => {});
+        await page.waitForTimeout(1000);
+        break; // この iter でクリック完了 → 次 iter で残りの通知をチェック
+      }
+
+      if (!noticeFound) {
+        if (iter === 0) this.log('[dismissNotice] No notice page detected');
+        return; // 通知が無くなったので終了
+      }
+    }
+    this.log('[dismissNotice] maxIterations reached');
+  }
+
+  /**
    * ブラウザ初期化
    */
   async initialize(headless = false): Promise<void> {
@@ -175,9 +293,23 @@ export class Spat4Voter {
       form.submit();
     });
     
-    // ログイン完了を待つ
-    await page.waitForURL('**/keiba/pc?HANDLERR=P001S', { timeout: 15000 });
-    
+    // ログイン後の遷移を待つ
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1500);
+
+    // 「利用者IDが初期設定」お知らせを自動突破
+    await this.dismissInitialNoticeIfPresent();
+
+    // 現在 URL を記録（デバッグ用）
+    this.log('[login] URL after login flow:', page.url());
+
+    // P001S でなければ直接移動
+    if (!page.url().includes('P001S')) {
+      this.log('[login] Not on P001S, navigating directly');
+      await page.goto('https://www.spat4.jp/keiba/pc?HANDLERR=P001S', { waitUntil: 'networkidle' });
+      await this.dismissInitialNoticeIfPresent();
+    }
+
     // this.voteState = VoteState.LOGIN_COMPLETED;
     this.log('Login successful');
   }
@@ -245,7 +377,10 @@ export class Spat4Voter {
     const page = this.ensurePage();
     
     this.log('Handling P001S page');
-    
+
+    // 安全ネット: ここでもお知らせページをチェック（login()側で突破できなかった場合の保険）
+    await this.dismissInitialNoticeIfPresent();
+
     // 日付確認 (情報取得のみ。失敗しても続行)
     const dateText = await page.locator('span.date').first().textContent({ timeout: 5000 }).catch(() => null);
     this.log('Date on page:', dateText);
@@ -280,8 +415,88 @@ export class Spat4Voter {
     if (!raceNameText?.includes(targetJoName)) {
       // 競馬場を切り替え
       this.log('Switching jo to:', targetJoName);
-      const joLink = page.locator(`a:has-text("${targetJoName}")`).first();
-      await joLink.click();
+
+      // SPAT4 はフレームベース構造。main page と全 frame を探索する。
+      // 帯広(ばんえい) など別表記の可能性も考慮 (帯広/帯広ば/ばんえい)。
+      const joNameVariants: string[] = [targetJoName];
+      if (targetJoName === '帯広') {
+        joNameVariants.push('帯広ば', 'ばんえい');
+      }
+
+      // デバッグ: ページ + 全 frame のリンクテキストを出力
+      try {
+        const allLinks = await page.locator('a').all();
+        const linkTexts = (await Promise.all(allLinks.map((l) => l.textContent().catch(() => '')))).filter((t) => t);
+        this.log('Main page links:', linkTexts.slice(0, 30));
+        for (const frame of page.frames()) {
+          if (frame === page.mainFrame()) continue;
+          const fLinks = await frame.locator('a').all();
+          const fTexts = (await Promise.all(fLinks.map((l) => l.textContent().catch(() => '')))).filter((t) => t);
+          if (fTexts.length) this.log(`Frame ${frame.url().slice(-30)} links:`, fTexts.slice(0, 20));
+        }
+      } catch { /* デバッグ用、失敗は無視 */ }
+
+      // jo リンク探索: メインpage → 全frame、複数 variant + 拡張 variant + img alt + onclick
+      // 「帯広」 / 「帯広競馬」 / 「ばんえい」 / 「帯広ば」 等のテキストパターンを総当たり
+      const extendedVariants: string[] = [];
+      for (const v of joNameVariants) {
+        extendedVariants.push(v);
+        if (v === '帯広') extendedVariants.push('帯広競馬');
+        else extendedVariants.push(v + '競馬');
+      }
+
+      const trySelectors = (variant: string): string[] => [
+        `a:has-text("${variant}")`,
+        `a img[alt*="${variant}"]`,           // img alt にマッチ
+        `a:has(img[alt*="${variant}"])`,       // a を親に持つ img alt
+        `[onclick*="${variant}"]`,              // onclick 属性
+        `button:has-text("${variant}")`,
+        `area[alt*="${variant}"]`,              // image map area
+      ];
+
+      let joLink: Locator | null = null;
+      const allFrames = [page.mainFrame(), ...page.frames().filter((f) => f !== page.mainFrame())];
+
+      outer: for (const variant of extendedVariants) {
+        for (const sel of trySelectors(variant)) {
+          for (const frame of allFrames) {
+            try {
+              const loc = frame.locator(sel).first();
+              if (await loc.count()) {
+                this.log(`[jo-link] Found via selector: ${sel} (variant: ${variant}, frame: ${frame.url().slice(-30)})`);
+                joLink = loc;
+                break outer;
+              }
+            } catch { /* 構文エラー等は次へ */ }
+          }
+        }
+      }
+
+      // それでも無ければ、main page の全 a要素を取得して text 含有チェック
+      if (!joLink) {
+        const allAnchors = await page.locator('a').all();
+        for (const a of allAnchors) {
+          const txt = (await a.textContent().catch(() => '') ?? '').trim();
+          const innerHtml = await a.innerHTML().catch(() => '');
+          for (const v of extendedVariants) {
+            if (txt.includes(v) || innerHtml.includes(v)) {
+              this.log(`[jo-link] Found via brute-force scan: txt="${txt.slice(0, 30)}" matched "${v}"`);
+              joLink = a;
+              break;
+            }
+          }
+          if (joLink) break;
+        }
+      }
+
+      if (!joLink) {
+        await this.captureScreenshot('spat4-jo-link-not-found');
+        throw new Error(
+          `競馬場「${targetJoName}」のリンクがP001Sページに見つかりません ` +
+          `(variants tried: ${joNameVariants.join(', ')}, frames: ${page.frames().length})`
+        );
+      }
+      await joLink.click({ timeout: 10000 });
       await page.waitForLoadState('networkidle');
       // 再帰的に再確認
       return this.handleP001SPage();
@@ -323,7 +538,7 @@ export class Spat4Voter {
           this.log('Clicking オッズ投票 link');
           this.currentKaimeIdx = 1; // 元のコードのiin_kaime_idx = 1
           await page.waitForTimeout(1000);
-          await links[i].click();
+          await links[i].click({ timeout: 10000 });
           await page.waitForLoadState('networkidle');
           return;
         }
@@ -626,28 +841,98 @@ export class Spat4Voter {
             if (this.currentKaimeIdx > this.betInfoList.length) {
               // すべての買い目設定完了 → 投票確認へ
               this.log('All kaime input completed, moving to confirm');
-              
+
               // 現在のフレーム状態をログ
               this.log('Current frame URL:', frame.url());
-              
-              const confirmBtn = frame.locator('input[value="投票内容確認へ"]');
-              
-              if (!(await confirmBtn.count())) {
+
+              // ★ 合計金額ボタンを先にクリック (合計を計算させる、必須ステップ)
+              const goukeiBtn = frame.locator('input[value="合計金額"], input[value*="合計"], button:has-text("合計金額")').first();
+              if (await goukeiBtn.count()) {
+                this.log('Clicking 合計金額 button first (compute total)');
+                try {
+                  await goukeiBtn.click({ timeout: 3000, force: true });
+                  await page.waitForTimeout(800);
+                } catch (e) {
+                  this.log('合計金額 click failed (non-fatal):', e);
+                }
+              } else {
+                this.log('合計金額 button not found (skipping)');
+              }
+
+              // 投票内容確認へボタン: 複数 selector で探索
+              const confirmSelectors = [
+                'input[value="投票内容確認へ"]',
+                'input[value*="投票内容確認"]',
+                'button:has-text("投票内容確認へ")',
+                'a:has-text("投票内容確認へ")',
+                'input[type="button"][value*="確認"]',
+                'input[type="submit"][value*="確認"]',
+              ];
+              let confirmBtn = null;
+              for (const sel of confirmSelectors) {
+                const loc = frame.locator(sel).first();
+                if (await loc.count()) {
+                  this.log(`Found 投票内容確認へ via: ${sel}`);
+                  confirmBtn = loc;
+                  break;
+                }
+              }
+
+              if (!confirmBtn) {
                 this.log('投票内容確認へ button not found, checking page content');
                 const bodyText = await frame.locator('body').textContent({ timeout: 5000 }).catch(() => '');
                 this.log('Frame body preview:', bodyText?.substring(0, 300));
                 throw new Error('投票内容確認へ button not found');
               }
-              
-              await page.waitForTimeout(1000);
-              this.log('Clicking 投票内容確認へ button');
-              await confirmBtn.click();
-              
-              // クリック後のフレーム状態をログ
+
+              await page.waitForTimeout(800);
+              this.log('Clicking 投票内容確認へ button (3-stage fallback)');
+
+              // 3段階フォールバック click
+              const urlBefore = page.url();
+              let clickedOk = false;
+              try {
+                await confirmBtn.click({ timeout: 5000 });
+                clickedOk = true;
+                this.log('Stage 1: locator.click() succeeded');
+              } catch (e) {
+                this.log('Stage 1 click failed:', e);
+              }
+              if (!clickedOk) {
+                try {
+                  await confirmBtn.click({ force: true, timeout: 5000 });
+                  clickedOk = true;
+                  this.log('Stage 2: force click succeeded');
+                } catch (e) {
+                  this.log('Stage 2 force click failed:', e);
+                }
+              }
+              if (!clickedOk) {
+                try {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  await confirmBtn.evaluate((el: any) => { el.click(); });
+                  clickedOk = true;
+                  this.log('Stage 3: evaluate click succeeded');
+                } catch (e) {
+                  this.log('Stage 3 evaluate click failed:', e);
+                }
+              }
+
+              // クリック後の状態待機 (frame 増減 or URL 変化)
               await page.waitForTimeout(2000);
+              await page.waitForLoadState('networkidle').catch(() => {});
               const allFrameUrls = page.frames().map(f => f.url());
               this.log('After clicking confirm, frame URLs:', allFrameUrls);
-              
+              this.log('URL changed?', page.url() !== urlBefore, 'before:', urlBefore.slice(-40), 'after:', page.url().slice(-40));
+
+              // P202S frame がまだ無く、しかし dialog などが出ている可能性をチェック
+              const alertText = await page.evaluate(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const w = globalThis as any;
+                return w.__lastAlert || '';
+              }).catch(() => '');
+              if (alertText) this.log('Last alert text:', alertText);
+
               return;
             }
             
